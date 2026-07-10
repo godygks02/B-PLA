@@ -92,6 +92,24 @@ Run a short Imagenette probe:
 python experiments/torch_bpla_vit_probe.py --num-samples 100 --batch-size 4 --affine-path dyadic --dyadic-terms 2
 ```
 
+The full ViT Linear replacement is intentionally expensive because every
+matrix multiplication is expanded into elementwise B-PLA products. For quick
+sensitivity checks, start with activation-only or a small number of Linear
+modules:
+
+```bash
+python experiments/torch_bpla_vit_probe.py --num-samples 100 --batch-size 16 --no-linear --affine-path dyadic --dyadic-terms 2
+python experiments/torch_bpla_vit_probe.py --num-samples 20 --batch-size 2 --max-linear-modules 4 --affine-path dyadic --dyadic-terms 2 --linear-chunk-out 128
+```
+
+For GPT-2, first sweep only a few Conv1D modules before trying full
+replacement:
+
+```bash
+python experiments/torch_bpla_gpt2_probe.py --stop-after-conversion --max-conv1d-modules 4 --affine-path dyadic --dyadic-terms 2
+python experiments/torch_bpla_gpt2_probe.py --num-windows 1 --max-conv1d-modules 4 --affine-path dyadic --dyadic-terms 2 --linear-chunk-out 128
+```
+
 ## Notes
 
 The PyTorch B-PLA path is a CUDA-friendly sensitivity proxy. It is intended to

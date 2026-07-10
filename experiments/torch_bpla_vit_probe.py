@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import math
 import sys
 from pathlib import Path
 
@@ -125,8 +126,10 @@ def evaluate(model: ViTForImageClassification, loader, device: torch.device, num
     top1 = 0
     top5 = 0
     logits_all = []
+    batch_size = loader.batch_size if loader.batch_size is not None else 1
+    total_batches = min(len(loader), math.ceil(num_samples / batch_size))
     with torch.no_grad():
-        for batch in tqdm(loader, desc="ViT eval"):
+        for batch in tqdm(loader, desc="ViT eval", total=total_batches):
             pixel_values = batch["pixel_values"].to(device)
             labels = batch["labels"].to(device)
             logits = model(pixel_values).logits
@@ -199,6 +202,12 @@ def main() -> None:
     probe, replaced_linear, replaced_act = convert_model(probe, args)
     print(f"Replaced Linear modules: {replaced_linear}")
     print(f"Replaced activation callables: {replaced_act}")
+    if replaced_linear > 16:
+        print(
+            "Warning: many B-PLA Linear modules are enabled. This proxy expands "
+            "matmul into elementwise approximate products and can be very slow. "
+            "Use --no-linear or --max-linear-modules for quick sensitivity probes."
+        )
 
     if args.stop_after_conversion:
         image_size = ann.config.image_size if isinstance(ann.config.image_size, int) else ann.config.image_size[0]
