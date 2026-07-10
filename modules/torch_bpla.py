@@ -276,7 +276,8 @@ def replace_linear_and_gelu(
             setattr(module, name, TorchBPLALinear(child, config))
             replaced_linear += 1
             continue
-        if replace_gelu and isinstance(child, nn.GELU):
+        child_name = child.__class__.__name__.lower()
+        if replace_gelu and (isinstance(child, nn.GELU) or "gelu" in child_name):
             setattr(module, name, TorchBPLAActivation("gelu", config))
             continue
         replaced_linear += replace_linear_and_gelu(

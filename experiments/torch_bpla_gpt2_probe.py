@@ -50,6 +50,8 @@ def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
         n_embd=32,
         n_layer=2,
         n_head=4,
+        bos_token_id=0,
+        eos_token_id=1,
     )
     return GPT2LMHeadModel(config).to(device).eval()
 
@@ -134,6 +136,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-gelu", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
+    parser.add_argument("--smoke-text", default="The quick brown fox jumps over the lazy dog.")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -164,9 +167,10 @@ def main() -> None:
     print(f"Replaced Conv1D modules: {replaced}")
 
     if args.stop_after_conversion:
-        sample = torch.randint(0, ann.config.vocab_size, (1, min(16, args.max_length)), device=device)
+        sample = tokenizer(args.smoke_text, return_tensors="pt").input_ids[:, : min(32, args.max_length)].to(device)
         stats = compare_logits(ann, probe, sample)
         print("Stop-after-conversion smoke forward passed.")
+        print(f"smoke text: {args.smoke_text!r}")
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         return
 

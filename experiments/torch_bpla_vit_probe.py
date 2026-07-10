@@ -64,6 +64,7 @@ def make_dry_run_model(device: torch.device) -> ViTForImageClassification:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=128,
+        hidden_act="gelu",
     )
     return ViTForImageClassification(config).to(device).eval()
 
@@ -71,10 +72,16 @@ def make_dry_run_model(device: torch.device) -> ViTForImageClassification:
 def replace_vit_intermediate_activations(module: nn.Module, config: TorchBPLAConfig) -> int:
     replaced = 0
     for child in module.modules():
-        if hasattr(child, "intermediate_act_fn"):
+        if isinstance(child, TorchBPLAActivation):
+            continue
+        if hasattr(child, "intermediate_act_fn") and not isinstance(child.intermediate_act_fn, TorchBPLAActivation):
             child.intermediate_act_fn = TorchBPLAActivation("gelu", config)
             replaced += 1
     return replaced
+
+
+def count_bpla_activations(module: nn.Module) -> int:
+    return sum(1 for child in module.modules() if isinstance(child, TorchBPLAActivation))
 
 
 def convert_model(model: ViTForImageClassification, args: argparse.Namespace) -> tuple[ViTForImageClassification, int, int]:
@@ -89,7 +96,7 @@ def convert_model(model: ViTForImageClassification, args: argparse.Namespace) ->
     replaced_act_fn = 0
     if not args.no_gelu:
         replaced_act_fn = replace_vit_intermediate_activations(model, cfg)
-    return model, replaced_linear, replaced_act_fn
+    return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model))
 
 
 def prepare_imagenette(args: argparse.Namespace):
