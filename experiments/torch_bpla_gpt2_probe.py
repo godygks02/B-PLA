@@ -1,0 +1,188 @@
+"""
+Torch-native B-PLA sensitivity probe for GPT-2.
+
+This script mirrors the old Mitchell C-2 GPT-2 experiment at the level needed
+for a fast accuracy-sensitivity check: GPT-2 Conv1D projections and GELU are
+replaced with CUDA-friendly B-PLA proxy modules. It deliberately does not claim
+hardware-faithful RTL behavior.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import math
+import sys
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+from datasets import load_dataset
+from tqdm import tqdm
+from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(PROJECT_ROOT))
+
+from modules.torch_bpla import TorchBPLAConfig, replace_gpt2_conv1d_and_gelu
+
+
+def get_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def build_config(args: argparse.Namespace) -> TorchBPLAConfig:
+    return TorchBPLAConfig(
+        prefix_bits=args.prefix_bits,
+        affine_path=args.affine_path,
+        dyadic_terms=args.dyadic_terms,
+        max_shift=args.max_shift,
+        activation_range=args.activation_range,
+        linear_chunk_out=args.linear_chunk_out,
+    )
+
+
+def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
+    config = GPT2Config(
+        vocab_size=128,
+        n_positions=32,
+        n_ctx=32,
+        n_embd=32,
+        n_layer=2,
+        n_head=4,
+    )
+    return GPT2LMHeadModel(config).to(device).eval()
+
+
+def convert_model(model: GPT2LMHeadModel, args: argparse.Namespace) -> tuple[GPT2LMHeadModel, int]:
+    cfg = build_config(args)
+    replaced = replace_gpt2_conv1d_and_gelu(
+        model,
+        cfg,
+        replace_conv1d=not args.no_conv1d,
+        replace_gelu=not args.no_gelu,
+        max_conv1d_modules=args.max_conv1d_modules,
+    )
+    return model, replaced
+
+
+def evaluate_ppl(
+    model: GPT2LMHeadModel,
+    tokenizer: GPT2Tokenizer,
+    dataset,
+    device: torch.device,
+    max_length: int,
+    stride: int,
+    num_windows: int,
+) -> float:
+    model.eval()
+    text = "\n\n".join(dataset["text"])
+    encodings = tokenizer(text, return_tensors="pt")
+    seq_len = encodings.input_ids.size(1)
+    nlls = []
+    prev_end_loc = 0
+
+    for window_idx, begin_loc in enumerate(tqdm(range(0, seq_len, stride), desc="GPT-2 PPL")):
+        if window_idx >= num_windows:
+            break
+        end_loc = min(begin_loc + max_length, seq_len)
+        trg_len = end_loc - prev_end_loc
+        input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
+        target_ids = input_ids.clone()
+        target_ids[:, :-trg_len] = -100
+
+        with torch.no_grad():
+            outputs = model(input_ids, labels=target_ids)
+            loss = outputs.loss if hasattr(outputs, "loss") else outputs[0]
+        nlls.append(loss.detach())
+        prev_end_loc = end_loc
+        if end_loc == seq_len:
+            break
+
+    return torch.exp(torch.stack(nlls).mean()).item()
+
+
+def compare_logits(model_a: nn.Module, model_b: nn.Module, input_ids: torch.Tensor) -> dict[str, float]:
+    with torch.no_grad():
+        logits_a = model_a(input_ids).logits
+        logits_b = model_b(input_ids).logits
+    diff = logits_b - logits_a
+    return {
+        "mae": diff.abs().mean().item(),
+        "rmse": torch.sqrt((diff * diff).mean()).item(),
+        "next_token_agreement": (logits_a.argmax(dim=-1) == logits_b.argmax(dim=-1)).float().mean().item() * 100.0,
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="GPT-2 B-PLA torch-native probe.")
+    parser.add_argument("--model-id", default="gpt2")
+    parser.add_argument("--dataset-name", default="wikitext")
+    parser.add_argument("--dataset-config", default="wikitext-103-raw-v1")
+    parser.add_argument("--dataset-split", default="test")
+    parser.add_argument("--max-length", type=int, default=256)
+    parser.add_argument("--stride", type=int, default=256)
+    parser.add_argument("--num-windows", type=int, default=4)
+    parser.add_argument("--prefix-bits", type=int, default=4)
+    parser.add_argument("--affine-path", choices=["float", "dyadic"], default="dyadic")
+    parser.add_argument("--dyadic-terms", type=int, default=2)
+    parser.add_argument("--max-shift", type=int, default=16)
+    parser.add_argument("--activation-range", type=float, default=4.0)
+    parser.add_argument("--linear-chunk-out", type=int, default=32)
+    parser.add_argument("--max-conv1d-modules", type=int, default=None)
+    parser.add_argument("--no-conv1d", action="store_true")
+    parser.add_argument("--no-gelu", action="store_true")
+    parser.add_argument("--evaluate-ann", action="store_true")
+    parser.add_argument("--stop-after-conversion", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    device = get_device()
+    print(f"Using device: {device}")
+
+    if args.dry_run:
+        ann = make_dry_run_model(device)
+        probe = copy.deepcopy(ann)
+        probe, replaced = convert_model(probe, args)
+        input_ids = torch.randint(0, ann.config.vocab_size, (1, 16), device=device)
+        stats = compare_logits(ann, probe, input_ids)
+        print("\nGPT-2 B-PLA dry run")
+        print("=" * 72)
+        print(f"replaced Conv1D modules  : {replaced}")
+        print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
+        print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
+        return
+
+    print(f"Loading model/tokenizer: {args.model_id}")
+    tokenizer = GPT2Tokenizer.from_pretrained(args.model_id)
+    ann = GPT2LMHeadModel.from_pretrained(args.model_id).to(device).eval()
+    probe = copy.deepcopy(ann)
+    probe, replaced = convert_model(probe, args)
+    print(f"Replaced Conv1D modules: {replaced}")
+
+    if args.stop_after_conversion:
+        sample = torch.randint(0, ann.config.vocab_size, (1, min(16, args.max_length)), device=device)
+        stats = compare_logits(ann, probe, sample)
+        print("Stop-after-conversion smoke forward passed.")
+        print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
+        return
+
+    print(f"Loading dataset: {args.dataset_name}/{args.dataset_config}/{args.dataset_split}")
+    dataset = load_dataset(args.dataset_name, args.dataset_config, split=args.dataset_split)
+    if args.evaluate_ann:
+        ann_ppl = evaluate_ppl(ann, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
+        print(f"ANN PPL: {ann_ppl:.4f}")
+
+    bpla_ppl = evaluate_ppl(probe, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
+    print("\nGPT-2 B-PLA Probe")
+    print("=" * 72)
+    print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
+    print(f"replaced Conv1D modules  : {replaced}")
+    print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")
+
+
+if __name__ == "__main__":
+    main()
