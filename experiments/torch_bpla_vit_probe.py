@@ -23,7 +23,7 @@ from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from modules.torch_bpla import TorchBPLAActivation, TorchBPLAConfig, replace_linear_and_gelu
+from modules.torch_bpla import TorchBPLAActivation, TorchBPLAConfig, TorchBPLALinear, replace_linear_and_gelu
 
 
 IMAGENETTE_TO_IMAGENET = {
@@ -83,6 +83,17 @@ def replace_vit_intermediate_activations(module: nn.Module, config: TorchBPLACon
 
 def count_bpla_activations(module: nn.Module) -> int:
     return sum(1 for child in module.modules() if isinstance(child, TorchBPLAActivation))
+
+
+def list_replaced_modules(module: nn.Module) -> tuple[list[str], list[str]]:
+    linear_names = []
+    activation_names = []
+    for name, child in module.named_modules():
+        if isinstance(child, TorchBPLALinear):
+            linear_names.append(name)
+        elif isinstance(child, TorchBPLAActivation):
+            activation_names.append(name)
+    return linear_names, activation_names
 
 
 def convert_model(model: ViTForImageClassification, args: argparse.Namespace) -> tuple[ViTForImageClassification, int, int]:
@@ -172,6 +183,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-linear", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
+    parser.add_argument("--list-replaced-modules", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -192,6 +204,14 @@ def main() -> None:
         print("=" * 72)
         print(f"replaced Linear modules  : {replaced_linear}")
         print(f"replaced act callables   : {replaced_act}")
+        if args.list_replaced_modules:
+            linear_names, activation_names = list_replaced_modules(probe)
+            print("replaced Linear names    :")
+            for name in linear_names:
+                print(f"  - {name}")
+            print("replaced activation names:")
+            for name in activation_names:
+                print(f"  - {name}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"top-1 agreement          : {stats['top1_agreement']:.2f}%")
         return
@@ -202,6 +222,14 @@ def main() -> None:
     probe, replaced_linear, replaced_act = convert_model(probe, args)
     print(f"Replaced Linear modules: {replaced_linear}")
     print(f"Replaced activation callables: {replaced_act}")
+    if args.list_replaced_modules:
+        linear_names, activation_names = list_replaced_modules(probe)
+        print("Replaced Linear module names:")
+        for name in linear_names:
+            print(f"  - {name}")
+        print("Replaced activation module names:")
+        for name in activation_names:
+            print(f"  - {name}")
     if replaced_linear > 16:
         print(
             "Warning: many B-PLA Linear modules are enabled. This proxy expands "
