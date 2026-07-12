@@ -276,17 +276,29 @@ def main() -> None:
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         return
 
+    ann_logits = None
     if args.evaluate_ann:
-        ann_top1, ann_top5, _ = evaluate(ann, loader, device, args.num_samples)
+        ann_top1, ann_top5, ann_logits = evaluate(ann, loader, device, args.num_samples)
         print(f"ANN Top-1 / Top-5: {ann_top1:.2f}% / {ann_top5:.2f}%")
 
-    top1, top5, _ = evaluate(probe, loader, device, args.num_samples)
+    top1, top5, bpla_logits = evaluate(probe, loader, device, args.num_samples)
     print("\nViT B-PLA Probe")
     print("=" * 72)
     print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
     print(f"replaced Linear modules  : {replaced_linear}")
     print(f"replaced act callables   : {replaced_act}")
     print(f"B-PLA Top-1 / Top-5      : {top1:.2f}% / {top5:.2f}%")
+    if ann_logits is not None:
+        if ann_logits.shape != bpla_logits.shape:
+            raise RuntimeError(
+                f"ANN/B-PLA logit shapes differ: {tuple(ann_logits.shape)} vs {tuple(bpla_logits.shape)}"
+            )
+        diff = bpla_logits - ann_logits
+        agreement = (ann_logits.argmax(dim=-1) == bpla_logits.argmax(dim=-1)).float().mean().item() * 100.0
+        mae = diff.abs().mean().item()
+        rmse = torch.sqrt((diff * diff).mean()).item()
+        print(f"ANN-BPLA Top-1 agreement : {agreement:.2f}%")
+        print(f"ANN-BPLA logit MAE/RMSE  : {mae:.6e} / {rmse:.6e}")
 
 
 if __name__ == "__main__":
