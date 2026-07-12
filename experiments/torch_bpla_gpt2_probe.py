@@ -27,6 +27,16 @@ sys.path.append(str(PROJECT_ROOT))
 from modules.torch_bpla import SharedBPLATables, TorchBPLAConfig, calibrate_model_activation_range, replace_gpt2_conv1d_and_gelu
 
 
+DATASET_ALIASES = {
+    # Newer huggingface_hub releases require a namespace/name repository ID.
+    "wikitext": "Salesforce/wikitext",
+}
+
+
+def normalize_dataset_name(dataset_name: str) -> str:
+    return DATASET_ALIASES.get(dataset_name, dataset_name)
+
+
 def get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -125,7 +135,7 @@ def compare_logits(model_a: nn.Module, model_b: nn.Module, input_ids: torch.Tens
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GPT-2 B-PLA torch-native probe.")
     parser.add_argument("--model-id", default="gpt2")
-    parser.add_argument("--dataset-name", default="wikitext")
+    parser.add_argument("--dataset-name", default="Salesforce/wikitext")
     parser.add_argument("--dataset-config", default="wikitext-103-raw-v1")
     parser.add_argument("--dataset-split", default="test")
     parser.add_argument("--max-length", type=int, default=256)
@@ -170,8 +180,11 @@ def main() -> None:
     print(f"Loading model/tokenizer: {args.model_id}")
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_id)
     ann = GPT2LMHeadModel.from_pretrained(args.model_id).to(device).eval()
-    print(f"Loading dataset: {args.dataset_name}/{args.dataset_config}/{args.dataset_split}")
-    dataset = load_dataset(args.dataset_name, args.dataset_config, split=args.dataset_split)
+    dataset_name = normalize_dataset_name(args.dataset_name)
+    if dataset_name != args.dataset_name:
+        print(f"Resolved dataset alias: {args.dataset_name} -> {dataset_name}")
+    print(f"Loading dataset: {dataset_name}/{args.dataset_config}/{args.dataset_split}")
+    dataset = load_dataset(dataset_name, args.dataset_config, split=args.dataset_split)
     cfg = build_config(args)
     if not args.no_gelu and not args.no_calibrate_activation:
         texts = (text for text in dataset["text"] if text.strip())
