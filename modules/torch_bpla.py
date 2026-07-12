@@ -10,7 +10,7 @@ class of B-PLA approximation?"
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Iterable
 
 import torch
 import torch.nn as nn
@@ -27,6 +27,39 @@ class TorchBPLAConfig:
     activation_range: float = 4.0
     activation_samples_per_segment: int = 64
     linear_chunk_out: int = 32
+
+
+class SharedBPLATables:
+    """Model-scoped cache shared by every converted B-PLA operator."""
+
+    def __init__(self, config: TorchBPLAConfig):
+        self.config = config
+        self._multiplier: dict[tuple[str, torch.dtype], dict[str, torch.Tensor]] = {}
+        self._activation: dict[tuple[str, str, torch.dtype], dict[str, torch.Tensor | int | float]] = {}
+
+    @staticmethod
+    def _device_key(device: torch.device) -> str:
+        return str(device)
+
+    def multiplier(self, device: torch.device, dtype: torch.dtype) -> dict[str, torch.Tensor]:
+        key = (self._device_key(device), dtype)
+        if key not in self._multiplier:
+            segments = 1 << self.config.prefix_bits
+            centers = (torch.arange(segments, device=device, dtype=dtype) + 0.5) / float(segments)
+            mu = centers[:, None]
+            nu = centers[None, :]
+            self._multiplier[key] = {
+                "coeff_a": _maybe_dyadic(nu.expand(segments, segments).contiguous(), self.config),
+                "coeff_b": _maybe_dyadic(mu.expand(segments, segments).contiguous(), self.config),
+                "coeff_c": _maybe_dyadic(-(mu * nu), self.config),
+            }
+        return self._multiplier[key]
+
+    def activation(self, target_name: str, device: torch.device, dtype: torch.dtype) -> dict[str, torch.Tensor | int | float]:
+        key = (target_name, self._device_key(device), dtype)
+        if key not in self._activation:
+            self._activation[key] = build_activation_table_torch(target_name, self.config, device, dtype)
+        return self._activation[key]
 
 
 def _validate_config(config: TorchBPLAConfig) -> None:
@@ -69,7 +102,12 @@ def _fraction_and_exponent(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor,
     return fraction, unbiased_exponent, sign
 
 
-def bpla_multiply_torch(a: torch.Tensor, b: torch.Tensor, config: TorchBPLAConfig) -> torch.Tensor:
+def bpla_multiply_torch(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    config: TorchBPLAConfig,
+    tables: SharedBPLATables | None = None,
+) -> torch.Tensor:
     """Approximate elementwise multiplication with torch-native B-PLA logic."""
 
     _validate_config(config)
@@ -83,12 +121,11 @@ def bpla_multiply_torch(a: torch.Tensor, b: torch.Tensor, config: TorchBPLAConfi
     idx_a = torch.clamp((frac_a * segments).floor().to(torch.long), 0, segments - 1)
     idx_b = torch.clamp((frac_b * segments).floor().to(torch.long), 0, segments - 1)
 
-    centers = (torch.arange(segments, device=a.device, dtype=dtype) + 0.5) / float(segments)
-    mu = centers[idx_a]
-    nu = centers[idx_b]
-    coeff_a = _maybe_dyadic(nu, config)
-    coeff_b = _maybe_dyadic(mu, config)
-    coeff_c = _maybe_dyadic(-(mu * nu), config)
+    shared = tables or SharedBPLATables(config)
+    lut = shared.multiplier(a.device, dtype)
+    coeff_a = lut["coeff_a"][idx_a, idx_b]
+    coeff_b = lut["coeff_b"][idx_a, idx_b]
+    coeff_c = lut["coeff_c"][idx_a, idx_b]
 
     cross = coeff_a * frac_a + coeff_b * frac_b + coeff_c
     mantissa = 1.0 + frac_a + frac_b + cross
@@ -105,6 +142,7 @@ def bpla_linear_torch(
     weight: torch.Tensor,
     bias: torch.Tensor | None,
     config: TorchBPLAConfig,
+    tables: SharedBPLATables | None = None,
 ) -> torch.Tensor:
     """Linear layer using B-PLA elementwise products, chunked over outputs."""
 
@@ -115,7 +153,7 @@ def bpla_linear_torch(
     chunk = max(1, config.linear_chunk_out)
     for start in range(0, weight.shape[0], chunk):
         w = weight[start : start + chunk]
-        products = bpla_multiply_torch(x_flat[:, None, :], w[None, :, :], config)
+        products = bpla_multiply_torch(x_flat[:, None, :], w[None, :, :], config, tables)
         out = products.sum(dim=-1)
         if bias is not None:
             out = out + bias[start : start + chunk]
@@ -134,6 +172,61 @@ TARGETS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
     "sigmoid": torch.sigmoid,
     "tanh": torch.tanh,
 }
+
+
+def calibrate_model_activation_range(
+    model: nn.Module,
+    batches: Iterable[Any],
+    forward_batch: Callable[[nn.Module, Any], Any],
+    max_batches: int,
+) -> float:
+    """Measure one symmetric GELU input range across the whole exact model."""
+
+    max_abs = 0.0
+    hooks: list[Any] = []
+    restored: list[tuple[nn.Module, Any]] = []
+
+    def observe(x: torch.Tensor) -> None:
+        nonlocal max_abs
+        if x.numel():
+            value = x.detach().abs().amax().item()
+            max_abs = max(max_abs, float(value))
+
+    def pre_hook(_module: nn.Module, inputs: tuple[Any, ...]) -> None:
+        if inputs and isinstance(inputs[0], torch.Tensor):
+            observe(inputs[0])
+
+    for child in model.modules():
+        child_name = child.__class__.__name__.lower()
+        if isinstance(child, nn.GELU) or "geluactivation" in child_name:
+            hooks.append(child.register_forward_pre_hook(pre_hook))
+        act = getattr(child, "intermediate_act_fn", None)
+        if act is not None and callable(act) and not isinstance(act, nn.Module):
+            original = act
+
+            def wrapped(x: torch.Tensor, fn: Callable[[torch.Tensor], torch.Tensor] = original) -> torch.Tensor:
+                observe(x)
+                return fn(x)
+
+            child.intermediate_act_fn = wrapped
+            restored.append((child, original))
+
+    try:
+        model.eval()
+        with torch.no_grad():
+            for batch_index, batch in enumerate(batches):
+                if batch_index >= max_batches:
+                    break
+                forward_batch(model, batch)
+    finally:
+        for hook in hooks:
+            hook.remove()
+        for child, original in restored:
+            child.intermediate_act_fn = original
+
+    if max_abs <= 0.0:
+        raise RuntimeError("No GELU inputs were observed during calibration.")
+    return max_abs
 
 
 def build_activation_table_torch(
@@ -219,9 +312,10 @@ def bpla_activation_torch(x: torch.Tensor, table: dict[str, torch.Tensor | int |
 
 
 class TorchBPLALinear(nn.Module):
-    def __init__(self, source: nn.Linear, config: TorchBPLAConfig):
+    def __init__(self, source: nn.Linear, config: TorchBPLAConfig, tables: SharedBPLATables | None = None):
         super().__init__()
         self.config = config
+        self.tables = tables or SharedBPLATables(config)
         self.weight = nn.Parameter(source.weight.detach().clone(), requires_grad=False)
         if source.bias is None:
             self.bias = None
@@ -229,35 +323,40 @@ class TorchBPLALinear(nn.Module):
             self.bias = nn.Parameter(source.bias.detach().clone(), requires_grad=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return bpla_linear_torch(x, self.weight, self.bias, self.config)
+        return bpla_linear_torch(x, self.weight, self.bias, self.config, self.tables)
 
 
 class TorchBPLAActivation(nn.Module):
-    def __init__(self, target_name: str = "gelu", config: TorchBPLAConfig | None = None):
+    def __init__(
+        self,
+        target_name: str = "gelu",
+        config: TorchBPLAConfig | None = None,
+        tables: SharedBPLATables | None = None,
+    ):
         super().__init__()
         self.target_name = target_name
         self.config = config or TorchBPLAConfig()
-        self._table: dict[str, torch.Tensor | int | float] | None = None
+        self.tables = tables or SharedBPLATables(self.config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self._table is None or self._table["slopes"].device != x.device or self._table["slopes"].dtype != x.dtype:
-            self._table = build_activation_table_torch(self.target_name, self.config, x.device, x.dtype)
-        return bpla_activation_torch(x, self._table, self.config)
+        table = self.tables.activation(self.target_name, x.device, x.dtype)
+        return bpla_activation_torch(x, table, self.config)
 
 
 class TorchBPLAConv1D(nn.Module):
     """B-PLA proxy replacement for HuggingFace GPT-style Conv1D."""
 
-    def __init__(self, source: Conv1D, config: TorchBPLAConfig):
+    def __init__(self, source: Conv1D, config: TorchBPLAConfig, tables: SharedBPLATables | None = None):
         super().__init__()
         self.config = config
+        self.tables = tables or SharedBPLATables(config)
         self.nf = source.nf
         self.weight = nn.Parameter(source.weight.detach().clone(), requires_grad=False)
         self.bias = nn.Parameter(source.bias.detach().clone(), requires_grad=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         size_out = x.size()[:-1] + (self.nf,)
-        out = bpla_linear_torch(x, self.weight.t(), self.bias, self.config)
+        out = bpla_linear_torch(x, self.weight.t(), self.bias, self.config, self.tables)
         return out.view(size_out)
 
 
@@ -267,18 +366,27 @@ def replace_linear_and_gelu(
     replace_linear: bool = True,
     replace_gelu: bool = True,
     max_linear_modules: int | None = None,
+    tables: SharedBPLATables | None = None,
 ) -> int:
     """In-place replacement helper for sensitivity checks on PyTorch models."""
 
+    tables = tables or SharedBPLATables(config)
+    if not tables._multiplier and not tables._activation:
+        reference = next(module.parameters(), None)
+        if reference is not None:
+            if replace_linear:
+                tables.multiplier(reference.device, reference.dtype)
+            if replace_gelu:
+                tables.activation("gelu", reference.device, reference.dtype)
     replaced_linear = 0
     for name, child in list(module.named_children()):
         if replace_linear and isinstance(child, nn.Linear) and (max_linear_modules is None or replaced_linear < max_linear_modules):
-            setattr(module, name, TorchBPLALinear(child, config))
+            setattr(module, name, TorchBPLALinear(child, config, tables))
             replaced_linear += 1
             continue
         child_name = child.__class__.__name__.lower()
         if replace_gelu and (isinstance(child, nn.GELU) or "gelu" in child_name):
-            setattr(module, name, TorchBPLAActivation("gelu", config))
+            setattr(module, name, TorchBPLAActivation("gelu", config, tables))
             continue
         replaced_linear += replace_linear_and_gelu(
             child,
@@ -286,6 +394,7 @@ def replace_linear_and_gelu(
             replace_linear=replace_linear,
             replace_gelu=replace_gelu,
             max_linear_modules=None if max_linear_modules is None else max_linear_modules - replaced_linear,
+            tables=tables,
         )
     return replaced_linear
 
@@ -296,20 +405,29 @@ def replace_gpt2_conv1d_and_gelu(
     replace_conv1d: bool = True,
     replace_gelu: bool = True,
     max_conv1d_modules: int | None = None,
+    tables: SharedBPLATables | None = None,
 ) -> int:
     """In-place replacement helper for GPT-2 style models."""
 
+    tables = tables or SharedBPLATables(config)
+    if not tables._multiplier and not tables._activation:
+        reference = next(module.parameters(), None)
+        if reference is not None:
+            if replace_conv1d:
+                tables.multiplier(reference.device, reference.dtype)
+            if replace_gelu:
+                tables.activation("gelu", reference.device, reference.dtype)
     replaced_conv = 0
     for name, child in list(module.named_children()):
         if replace_conv1d and isinstance(child, Conv1D) and (max_conv1d_modules is None or replaced_conv < max_conv1d_modules):
-            setattr(module, name, TorchBPLAConv1D(child, config))
+            setattr(module, name, TorchBPLAConv1D(child, config, tables))
             replaced_conv += 1
             continue
         if replace_gelu and isinstance(child, nn.GELU):
-            setattr(module, name, TorchBPLAActivation("gelu", config))
+            setattr(module, name, TorchBPLAActivation("gelu", config, tables))
             continue
         if replace_gelu and child.__class__.__name__.lower().endswith("geluactivation"):
-            setattr(module, name, TorchBPLAActivation("gelu", config))
+            setattr(module, name, TorchBPLAActivation("gelu", config, tables))
             continue
         replaced_conv += replace_gpt2_conv1d_and_gelu(
             child,
@@ -317,5 +435,6 @@ def replace_gpt2_conv1d_and_gelu(
             replace_conv1d=replace_conv1d,
             replace_gelu=replace_gelu,
             max_conv1d_modules=None if max_conv1d_modules is None else max_conv1d_modules - replaced_conv,
+            tables=tables,
         )
     return replaced_conv

@@ -24,7 +24,7 @@ from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from modules.torch_bpla import TorchBPLAConfig, replace_gpt2_conv1d_and_gelu
+from modules.torch_bpla import SharedBPLATables, TorchBPLAConfig, calibrate_model_activation_range, replace_gpt2_conv1d_and_gelu
 
 
 def get_device() -> torch.device:
@@ -56,14 +56,20 @@ def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
     return GPT2LMHeadModel(config).to(device).eval()
 
 
-def convert_model(model: GPT2LMHeadModel, args: argparse.Namespace) -> tuple[GPT2LMHeadModel, int]:
-    cfg = build_config(args)
+def convert_model(
+    model: GPT2LMHeadModel,
+    args: argparse.Namespace,
+    cfg: TorchBPLAConfig | None = None,
+) -> tuple[GPT2LMHeadModel, int]:
+    cfg = cfg or build_config(args)
+    tables = SharedBPLATables(cfg)
     replaced = replace_gpt2_conv1d_and_gelu(
         model,
         cfg,
         replace_conv1d=not args.no_conv1d,
         replace_gelu=not args.no_gelu,
         max_conv1d_modules=args.max_conv1d_modules,
+        tables=tables,
     )
     return model, replaced
 
@@ -130,6 +136,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dyadic-terms", type=int, default=2)
     parser.add_argument("--max-shift", type=int, default=16)
     parser.add_argument("--activation-range", type=float, default=4.0)
+    parser.add_argument("--calibration-batches", type=int, default=4)
+    parser.add_argument("--no-calibrate-activation", action="store_true")
     parser.add_argument("--linear-chunk-out", type=int, default=32)
     parser.add_argument("--max-conv1d-modules", type=int, default=None)
     parser.add_argument("--no-conv1d", action="store_true")
@@ -162,8 +170,25 @@ def main() -> None:
     print(f"Loading model/tokenizer: {args.model_id}")
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_id)
     ann = GPT2LMHeadModel.from_pretrained(args.model_id).to(device).eval()
+    print(f"Loading dataset: {args.dataset_name}/{args.dataset_config}/{args.dataset_split}")
+    dataset = load_dataset(args.dataset_name, args.dataset_config, split=args.dataset_split)
+    cfg = build_config(args)
+    if not args.no_gelu and not args.no_calibrate_activation:
+        texts = (text for text in dataset["text"] if text.strip())
+        calibration_inputs = (
+            tokenizer(text, return_tensors="pt", truncation=True, max_length=args.max_length).input_ids
+            for text in texts
+        )
+        measured_range = calibrate_model_activation_range(
+            ann,
+            calibration_inputs,
+            lambda model, input_ids: model(input_ids.to(device)),
+            args.calibration_batches,
+        )
+        cfg = TorchBPLAConfig(**{**cfg.__dict__, "activation_range": measured_range})
+        print(f"Calibrated shared GELU range: +/-{measured_range:.6f}")
     probe = copy.deepcopy(ann)
-    probe, replaced = convert_model(probe, args)
+    probe, replaced = convert_model(probe, args, cfg)
     print(f"Replaced Conv1D modules: {replaced}")
 
     if args.stop_after_conversion:
@@ -174,8 +199,6 @@ def main() -> None:
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         return
 
-    print(f"Loading dataset: {args.dataset_name}/{args.dataset_config}/{args.dataset_split}")
-    dataset = load_dataset(args.dataset_name, args.dataset_config, split=args.dataset_split)
     if args.evaluate_ann:
         ann_ppl = evaluate_ppl(ann, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
         print(f"ANN PPL: {ann_ppl:.4f}")

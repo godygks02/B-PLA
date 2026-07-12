@@ -23,7 +23,14 @@ from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from modules.torch_bpla import TorchBPLAActivation, TorchBPLAConfig, TorchBPLALinear, replace_linear_and_gelu
+from modules.torch_bpla import (
+    SharedBPLATables,
+    TorchBPLAActivation,
+    TorchBPLAConfig,
+    TorchBPLALinear,
+    calibrate_model_activation_range,
+    replace_linear_and_gelu,
+)
 
 
 IMAGENETTE_TO_IMAGENET = {
@@ -70,13 +77,17 @@ def make_dry_run_model(device: torch.device) -> ViTForImageClassification:
     return ViTForImageClassification(config).to(device).eval()
 
 
-def replace_vit_intermediate_activations(module: nn.Module, config: TorchBPLAConfig) -> int:
+def replace_vit_intermediate_activations(
+    module: nn.Module,
+    config: TorchBPLAConfig,
+    tables: SharedBPLATables,
+) -> int:
     replaced = 0
     for child in module.modules():
         if isinstance(child, TorchBPLAActivation):
             continue
         if hasattr(child, "intermediate_act_fn") and not isinstance(child.intermediate_act_fn, TorchBPLAActivation):
-            child.intermediate_act_fn = TorchBPLAActivation("gelu", config)
+            child.intermediate_act_fn = TorchBPLAActivation("gelu", config, tables)
             replaced += 1
     return replaced
 
@@ -96,18 +107,24 @@ def list_replaced_modules(module: nn.Module) -> tuple[list[str], list[str]]:
     return linear_names, activation_names
 
 
-def convert_model(model: ViTForImageClassification, args: argparse.Namespace) -> tuple[ViTForImageClassification, int, int]:
-    cfg = build_config(args)
+def convert_model(
+    model: ViTForImageClassification,
+    args: argparse.Namespace,
+    cfg: TorchBPLAConfig | None = None,
+) -> tuple[ViTForImageClassification, int, int]:
+    cfg = cfg or build_config(args)
+    tables = SharedBPLATables(cfg)
     replaced_linear = replace_linear_and_gelu(
         model,
         cfg,
         replace_linear=not args.no_linear,
         replace_gelu=not args.no_gelu,
         max_linear_modules=args.max_linear_modules,
+        tables=tables,
     )
     replaced_act_fn = 0
     if not args.no_gelu:
-        replaced_act_fn = replace_vit_intermediate_activations(model, cfg)
+        replaced_act_fn = replace_vit_intermediate_activations(model, cfg, tables)
     return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model))
 
 
@@ -178,6 +195,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dyadic-terms", type=int, default=2)
     parser.add_argument("--max-shift", type=int, default=16)
     parser.add_argument("--activation-range", type=float, default=4.0)
+    parser.add_argument("--calibration-batches", type=int, default=4)
+    parser.add_argument("--no-calibrate-activation", action="store_true")
     parser.add_argument("--linear-chunk-out", type=int, default=32)
     parser.add_argument("--max-linear-modules", type=int, default=None)
     parser.add_argument("--no-linear", action="store_true")
@@ -218,8 +237,20 @@ def main() -> None:
 
     print(f"Loading ViT model: {args.model_id}")
     ann = ViTForImageClassification.from_pretrained(args.model_id).to(device).eval()
+    dataset = prepare_imagenette(args)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
+    cfg = build_config(args)
+    if not args.no_gelu and not args.no_calibrate_activation:
+        measured_range = calibrate_model_activation_range(
+            ann,
+            loader,
+            lambda model, batch: model(batch["pixel_values"].to(device)),
+            args.calibration_batches,
+        )
+        cfg = TorchBPLAConfig(**{**cfg.__dict__, "activation_range": measured_range})
+        print(f"Calibrated shared GELU range: +/-{measured_range:.6f}")
     probe = copy.deepcopy(ann)
-    probe, replaced_linear, replaced_act = convert_model(probe, args)
+    probe, replaced_linear, replaced_act = convert_model(probe, args, cfg)
     print(f"Replaced Linear modules: {replaced_linear}")
     print(f"Replaced activation callables: {replaced_act}")
     if args.list_replaced_modules:
@@ -245,8 +276,6 @@ def main() -> None:
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         return
 
-    dataset = prepare_imagenette(args)
-    loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size)
     if args.evaluate_ann:
         ann_top1, ann_top5, _ = evaluate(ann, loader, device, args.num_samples)
         print(f"ANN Top-1 / Top-5: {ann_top1:.2f}% / {ann_top5:.2f}%")
