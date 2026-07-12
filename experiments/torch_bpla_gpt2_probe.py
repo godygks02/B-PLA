@@ -104,7 +104,8 @@ def evaluate_ppl(
     text = "\n\n".join(dataset["text"])
     encodings = tokenizer(text, return_tensors="pt")
     seq_len = encodings.input_ids.size(1)
-    nlls = []
+    total_nll = torch.zeros((), device=device)
+    total_tokens = 0
     prev_end_loc = 0
 
     for window_idx, begin_loc in enumerate(tqdm(range(0, seq_len, stride), desc="GPT-2 PPL")):
@@ -119,12 +120,90 @@ def evaluate_ppl(
         with torch.no_grad():
             outputs = model(input_ids, labels=target_ids)
             loss = outputs.loss if hasattr(outputs, "loss") else outputs[0]
-        nlls.append(loss.detach())
+        valid_tokens = int((target_ids[:, 1:] != -100).sum().item())
+        total_nll += loss.detach() * valid_tokens
+        total_tokens += valid_tokens
         prev_end_loc = end_loc
         if end_loc == seq_len:
             break
 
-    return torch.exp(torch.stack(nlls).mean()).item()
+    if total_tokens == 0:
+        raise RuntimeError("No target tokens were evaluated for perplexity.")
+    return torch.exp(total_nll / total_tokens).item()
+
+
+def evaluate_ann_bpla_pair(
+    ann: GPT2LMHeadModel,
+    bpla: GPT2LMHeadModel,
+    tokenizer: GPT2Tokenizer,
+    dataset,
+    device: torch.device,
+    max_length: int,
+    stride: int,
+    num_windows: int,
+) -> dict[str, float]:
+    """Evaluate ANN and B-PLA on identical windows and compare their logits."""
+
+    ann.eval()
+    bpla.eval()
+    text = "\n\n".join(dataset["text"])
+    encodings = tokenizer(text, return_tensors="pt")
+    seq_len = encodings.input_ids.size(1)
+    ann_total_nll = torch.zeros((), device=device)
+    bpla_total_nll = torch.zeros((), device=device)
+    total_tokens = 0
+    agreement_count = 0
+    logit_abs_sum = 0.0
+    logit_sq_sum = 0.0
+    logit_count = 0
+    prev_end_loc = 0
+
+    for window_idx, begin_loc in enumerate(tqdm(range(0, seq_len, stride), desc="GPT-2 ANN/B-PLA")):
+        if window_idx >= num_windows:
+            break
+        end_loc = min(begin_loc + max_length, seq_len)
+        trg_len = end_loc - prev_end_loc
+        input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
+        target_ids = input_ids.clone()
+        target_ids[:, :-trg_len] = -100
+
+        with torch.no_grad():
+            ann_outputs = ann(input_ids, labels=target_ids)
+            bpla_outputs = bpla(input_ids, labels=target_ids)
+
+        valid_mask = target_ids[:, 1:] != -100
+        valid_tokens = int(valid_mask.sum().item())
+        ann_total_nll += ann_outputs.loss.detach() * valid_tokens
+        bpla_total_nll += bpla_outputs.loss.detach() * valid_tokens
+        total_tokens += valid_tokens
+
+        ann_logits = ann_outputs.logits[:, :-1, :][valid_mask]
+        bpla_logits = bpla_outputs.logits[:, :-1, :][valid_mask]
+        agreement_count += int((ann_logits.argmax(dim=-1) == bpla_logits.argmax(dim=-1)).sum().item())
+        diff = bpla_logits - ann_logits
+        logit_abs_sum += diff.abs().sum().item()
+        logit_sq_sum += (diff * diff).sum().item()
+        logit_count += diff.numel()
+
+        prev_end_loc = end_loc
+        if end_loc == seq_len:
+            break
+
+    if total_tokens == 0 or logit_count == 0:
+        raise RuntimeError("No target tokens were evaluated for ANN/B-PLA comparison.")
+
+    ann_ppl = torch.exp(ann_total_nll / total_tokens).item()
+    bpla_ppl = torch.exp(bpla_total_nll / total_tokens).item()
+    return {
+        "ann_ppl": ann_ppl,
+        "bpla_ppl": bpla_ppl,
+        "ppl_delta": bpla_ppl - ann_ppl,
+        "ppl_delta_pct": 100.0 * (bpla_ppl - ann_ppl) / ann_ppl,
+        "next_token_agreement": 100.0 * agreement_count / total_tokens,
+        "logit_mae": logit_abs_sum / logit_count,
+        "logit_rmse": math.sqrt(logit_sq_sum / logit_count),
+        "evaluated_tokens": float(total_tokens),
+    }
 
 
 def compare_logits(model_a: nn.Module, model_b: nn.Module, input_ids: torch.Tensor) -> dict[str, float]:
@@ -221,17 +300,34 @@ def main() -> None:
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         return
 
+    comparison = None
     if args.evaluate_ann:
-        ann_ppl = evaluate_ppl(ann, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
-        print(f"ANN PPL: {ann_ppl:.4f}")
-
-    bpla_ppl = evaluate_ppl(probe, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
+        comparison = evaluate_ann_bpla_pair(
+            ann,
+            probe,
+            tokenizer,
+            dataset,
+            device,
+            args.max_length,
+            args.stride,
+            args.num_windows,
+        )
+        bpla_ppl = comparison["bpla_ppl"]
+    else:
+        bpla_ppl = evaluate_ppl(probe, tokenizer, dataset, device, args.max_length, args.stride, args.num_windows)
     print("\nGPT-2 B-PLA Probe")
     print("=" * 72)
     print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
     print(f"replaced Conv1D modules  : {replaced}")
     print(f"replaced act callables   : {replaced_activations}")
+    if comparison is not None:
+        print(f"ANN PPL                  : {comparison['ann_ppl']:.4f}")
     print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")
+    if comparison is not None:
+        print(f"B-PLA PPL delta          : {comparison['ppl_delta']:+.4f} ({comparison['ppl_delta_pct']:+.2f}%)")
+        print(f"ANN-BPLA token agreement : {comparison['next_token_agreement']:.2f}%")
+        print(f"ANN-BPLA logit MAE/RMSE  : {comparison['logit_mae']:.6e} / {comparison['logit_rmse']:.6e}")
+        print(f"evaluated target tokens  : {int(comparison['evaluated_tokens'])}")
 
 
 if __name__ == "__main__":
