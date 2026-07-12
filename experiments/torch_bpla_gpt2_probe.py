@@ -24,7 +24,13 @@ from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from modules.torch_bpla import SharedBPLATables, TorchBPLAConfig, calibrate_model_activation_range, replace_gpt2_conv1d_and_gelu
+from modules.torch_bpla import (
+    SharedBPLATables,
+    TorchBPLAActivation,
+    TorchBPLAConfig,
+    calibrate_model_activation_range,
+    replace_gpt2_conv1d_and_gelu,
+)
 
 
 DATASET_ALIASES = {
@@ -70,7 +76,7 @@ def convert_model(
     model: GPT2LMHeadModel,
     args: argparse.Namespace,
     cfg: TorchBPLAConfig | None = None,
-) -> tuple[GPT2LMHeadModel, int]:
+) -> tuple[GPT2LMHeadModel, int, int]:
     cfg = cfg or build_config(args)
     tables = SharedBPLATables(cfg)
     replaced = replace_gpt2_conv1d_and_gelu(
@@ -81,7 +87,8 @@ def convert_model(
         max_conv1d_modules=args.max_conv1d_modules,
         tables=tables,
     )
-    return model, replaced
+    replaced_activations = sum(1 for child in model.modules() if isinstance(child, TorchBPLAActivation))
+    return model, replaced, replaced_activations
 
 
 def evaluate_ppl(
@@ -167,12 +174,13 @@ def main() -> None:
     if args.dry_run:
         ann = make_dry_run_model(device)
         probe = copy.deepcopy(ann)
-        probe, replaced = convert_model(probe, args)
+        probe, replaced, replaced_activations = convert_model(probe, args)
         input_ids = torch.randint(0, ann.config.vocab_size, (1, 16), device=device)
         stats = compare_logits(ann, probe, input_ids)
         print("\nGPT-2 B-PLA dry run")
         print("=" * 72)
         print(f"replaced Conv1D modules  : {replaced}")
+        print(f"replaced act callables   : {replaced_activations}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
         return
@@ -201,8 +209,9 @@ def main() -> None:
         cfg = TorchBPLAConfig(**{**cfg.__dict__, "activation_range": measured_range})
         print(f"Calibrated shared GELU range: +/-{measured_range:.6f}")
     probe = copy.deepcopy(ann)
-    probe, replaced = convert_model(probe, args, cfg)
+    probe, replaced, replaced_activations = convert_model(probe, args, cfg)
     print(f"Replaced Conv1D modules: {replaced}")
+    print(f"Replaced activation callables: {replaced_activations}")
 
     if args.stop_after_conversion:
         sample = tokenizer(args.smoke_text, return_tensors="pt").input_ids[:, : min(32, args.max_length)].to(device)
@@ -221,6 +230,7 @@ def main() -> None:
     print("=" * 72)
     print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
     print(f"replaced Conv1D modules  : {replaced}")
+    print(f"replaced act callables   : {replaced_activations}")
     print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")
 
 
