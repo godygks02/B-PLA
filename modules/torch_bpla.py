@@ -18,7 +18,14 @@ import torch.nn.functional as F
 from transformers.pytorch_utils import Conv1D
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
-from transformers.models.vit.modeling_vit import ViTSelfAttention
+
+try:
+    # Transformers versions before the ViT attention refactor expose the
+    # dispatching module as ViTSelfAttention.
+    from transformers.models.vit.modeling_vit import ViTSelfAttention as ViTAttentionModule
+except ImportError:
+    # Newer versions fold self-attention into ViTAttention.
+    from transformers.models.vit.modeling_vit import ViTAttention as ViTAttentionModule
 
 
 @dataclass(frozen=True)
@@ -199,7 +206,7 @@ def replace_attention_matmuls(
 ) -> int:
     """Route ViT/GPT-2 QK and attention-value matmuls through B-PLA."""
 
-    attention_modules = [child for child in module.modules() if isinstance(child, (ViTSelfAttention, GPT2Attention))]
+    attention_modules = [child for child in module.modules() if isinstance(child, (ViTAttentionModule, GPT2Attention))]
     if not attention_modules:
         return 0
 
