@@ -20,6 +20,13 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
 
 try:
+    from transformers import AttentionMaskInterface
+    from transformers.masking_utils import eager_mask
+except ImportError:  # Compatibility with pre-mask-registry Transformers.
+    AttentionMaskInterface = None
+    eager_mask = None
+
+try:
     # Transformers versions before the ViT attention refactor expose the
     # dispatching module as ViTSelfAttention.
     from transformers.models.vit.modeling_vit import ViTSelfAttention as ViTAttentionModule
@@ -331,6 +338,11 @@ def replace_attention_matmuls(
         return attention_output.transpose(1, 2), attention_weights
 
     ALL_ATTENTION_FUNCTIONS.register(interface_name, bpla_attention_forward)
+    # A custom attention backend needs a mask formatter registered under the
+    # same name. Without this, recent Transformers versions deliberately skip
+    # causal-mask creation and pass attention_mask=None.
+    if AttentionMaskInterface is not None and eager_mask is not None:
+        AttentionMaskInterface.register(interface_name, eager_mask)
     for attention_module in attention_modules:
         attention_module.config._attn_implementation = interface_name
     module._bpla_attention_mode = mode
