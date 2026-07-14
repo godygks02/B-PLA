@@ -93,7 +93,6 @@ def run_target(
         bit_width=bit_width,
         fractional_bits=bit_width - 4,
         prefix_bits=prefix_bits,
-        progressive_levels=True,
         x_min=x_min,
         x_max=x_max,
     )

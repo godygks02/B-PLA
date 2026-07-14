@@ -18,6 +18,7 @@ PyTorch proxy modules for large-model sensitivity tests.
 - `modules/bpla_multiplier.py`: FP32 mantissa-interaction B-PLA multiplier.
 - `modules/bpla_activation.py`: FP32 bit-field-routed B-PLA activation.
 - `modules/dyadic.py`: signed power-of-two dyadic coefficient utilities.
+- `modules/pla_snn.py`: term-free event-driven PLA compiler and conditional-accumulation runtime.
 - `modules/torch_bpla.py`: CUDA-friendly PyTorch B-PLA proxy layers.
 - `experiments/bpla_mlp_experiment.py`: hardware-style MNIST MLP probe.
 - `experiments/torch_bpla_mlp_probe.py`: fast PyTorch MNIST MLP probe.

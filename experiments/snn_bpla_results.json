@@ -3,55 +3,28 @@
     {
       "target": "relu",
       "neuron": "fs",
-      "progressive": true,
-      "mae": 0.001146590869796424,
-      "rmse": 0.002078834445629666,
+      "mae": 0.0005062909062237674,
+      "rmse": 0.0008635085116553879,
       "max_abs": 0.008795978327228227,
-      "spike_events": 10287.0,
-      "snn_energy_pj": 5862.18,
+      "spike_events": 10245.0,
+      "snn_energy_pj": 5857.9800000000005,
       "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 0.3111296280570652
-    },
-    {
-      "target": "relu",
-      "neuron": "fs",
-      "progressive": false,
-      "mae": 0.001146590869796424,
-      "rmse": 0.002078834445629666,
-      "max_abs": 0.008795978327228227,
-      "spike_events": 10287.0,
-      "snn_energy_pj": 5862.18,
-      "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 0.3111296280570652
+      "energy_ratio": 0.3109067170516304
     },
     {
       "target": "relu",
       "neuron": "if",
-      "progressive": false,
-      "mae": 0.0012141489720606446,
-      "rmse": 0.002168033799188833,
+      "mae": 0.0005101056034893924,
+      "rmse": 0.0008720940952071346,
       "max_abs": 0.008795978327228227,
-      "spike_events": 1047757.0,
-      "snn_energy_pj": 109609.18000000001,
+      "spike_events": 1048594.0,
+      "snn_energy_pj": 109692.88,
       "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 5.817402980638587
+      "energy_ratio": 5.821845278532608
     },
     {
       "target": "gelu",
       "neuron": "fs",
-      "progressive": true,
-      "mae": 0.0022157676772702403,
-      "rmse": 0.002655881721008564,
-      "max_abs": 0.005787994580646938,
-      "spike_events": 13780.0,
-      "snn_energy_pj": 6211.4800000000005,
-      "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 0.3296683933423913
-    },
-    {
-      "target": "gelu",
-      "neuron": "fs",
-      "progressive": false,
       "mae": 0.0022157676772702403,
       "rmse": 0.002655881721008564,
       "max_abs": 0.005787994580646938,
@@ -63,31 +36,17 @@
     {
       "target": "gelu",
       "neuron": "if",
-      "progressive": false,
-      "mae": 0.0018166318827478897,
-      "rmse": 0.0022258624933747784,
+      "mae": 0.0023612835088531155,
+      "rmse": 0.002760910995694543,
       "max_abs": 0.005787994580646938,
-      "spike_events": 1172119.0,
-      "snn_energy_pj": 122045.38,
+      "spike_events": 1249509.0,
+      "snn_energy_pj": 129784.38,
       "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 6.477442467730977
+      "energy_ratio": 6.888182532269021
     },
     {
       "target": "quick_gelu",
       "neuron": "fs",
-      "progressive": true,
-      "mae": 0.0022158845656256292,
-      "rmse": 0.002583244932086505,
-      "max_abs": 0.005772493544336843,
-      "spike_events": 14640.0,
-      "snn_energy_pj": 6297.4800000000005,
-      "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 0.334232761548913
-    },
-    {
-      "target": "quick_gelu",
-      "neuron": "fs",
-      "progressive": false,
       "mae": 0.0022158845656256292,
       "rmse": 0.002583244932086505,
       "max_abs": 0.005772493544336843,
@@ -99,105 +58,37 @@
     {
       "target": "quick_gelu",
       "neuron": "if",
-      "progressive": false,
-      "mae": 0.0018700386204184595,
-      "rmse": 0.0022011755601286332,
-      "max_abs": 0.005337899991678441,
-      "spike_events": 1176925.0,
-      "snn_energy_pj": 122525.98,
+      "mae": 0.002232754013149551,
+      "rmse": 0.002596138153469612,
+      "max_abs": 0.005772493544336843,
+      "spike_events": 1264801.0,
+      "snn_energy_pj": 131313.58000000002,
       "fp_energy_pj": 18841.600000000002,
-      "energy_ratio": 6.502949855638586
+      "energy_ratio": 6.9693433678668475
     }
   ],
   "multiplier": [
     {
       "neuron": "fs",
-      "progressive": true,
       "mean_rel": 0.0001550717239229299,
       "p99_rel": 0.0005894271847871804,
       "max_rel": 0.0008278527692049813,
       "spike_events": 67731.0,
-      "snn_energy_pj": 19144.780000000002,
+      "snn_energy_pj": 14351.580000000002,
       "fp_energy_pj": 15155.2,
-      "energy_ratio": 1.2632482580236488
-    },
-    {
-      "neuron": "fs",
-      "progressive": false,
-      "mean_rel": 0.0001550717239229299,
-      "p99_rel": 0.0005894271847871804,
-      "max_rel": 0.0008278527692049813,
-      "spike_events": 67731.0,
-      "snn_energy_pj": 19144.780000000002,
-      "fp_energy_pj": 15155.2,
-      "energy_ratio": 1.2632482580236488
+      "energy_ratio": 0.9469739759290541
     },
     {
       "neuron": "if",
-      "progressive": false,
-      "mean_rel": 0.00015398819939290107,
-      "p99_rel": 0.0005785633289187304,
-      "max_rel": 0.000896408093531256,
-      "spike_events": 3417396.0,
-      "snn_energy_pj": 354111.28,
+      "mean_rel": 0.0001554163262156709,
+      "p99_rel": 0.000596959619883971,
+      "max_rel": 0.0008278527692049813,
+      "spike_events": 3413437.0,
+      "snn_energy_pj": 348922.18,
       "fp_energy_pj": 15155.2,
-      "energy_ratio": 23.365661951013514
+      "energy_ratio": 23.023264622043918
     }
   ],
-  "progressive_levels": {
-    "activation_gelu": [
-      {
-        "level": 1.0,
-        "mae": 0.0023776253106660918,
-        "rmse": 0.002947757755968872,
-        "spike_events": 13722.0
-      },
-      {
-        "level": 2.0,
-        "mae": 0.0022342670132023366,
-        "rmse": 0.0026840337217192726,
-        "spike_events": 13778.0
-      },
-      {
-        "level": 3.0,
-        "mae": 0.002218690257900254,
-        "rmse": 0.0026564155247208597,
-        "spike_events": 13794.0
-      },
-      {
-        "level": 4.0,
-        "mae": 0.0022157676772702403,
-        "rmse": 0.002655881721008564,
-        "spike_events": 13780.0
-      }
-    ],
-    "multiplier": [
-      {
-        "level": 1.0,
-        "mean_rel": 0.008223439327081165,
-        "p99_rel": 0.03579448065233374,
-        "spike_events": 20309.0
-      },
-      {
-        "level": 2.0,
-        "mean_rel": 0.0019738415277428274,
-        "p99_rel": 0.008040043629694701,
-        "spike_events": 19973.0
-      },
-      {
-        "level": 3.0,
-        "mean_rel": 0.0005192893944982231,
-        "p99_rel": 0.002068145971368987,
-        "spike_events": 20035.0
-      },
-      {
-        "level": 4.0,
-        "mean_rel": 0.00015454406766627818,
-        "p99_rel": 0.0005733871290280127,
-        "spike_events": 20001.0
-      }
-    ]
-  },
   "toy_mlp": {
     "samples": 512.0,
     "top1_agreement": 0.998046875,

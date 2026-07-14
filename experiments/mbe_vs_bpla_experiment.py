@@ -136,7 +136,6 @@ def fp_multiplication_sweep(
             prefix_bits=prefix_bits,
             threshold=1.0 / 65536.0,
             neuron_type="fs",
-            progressive_levels=True,
         )
         result = bpla_SNN_multiplier.bpla_snn_multiply(a, b, bpla_cfg)
         metrics = bpla_SNN_multiplier.error_summary(result["decoded"], ref)
@@ -182,7 +181,6 @@ def attention_score_sweep(
         prefix_bits=4,
         threshold=1.0 / 65536.0,
         neuron_type="fs",
-        progressive_levels=True,
     )
 
     method_specs = [

@@ -15,6 +15,7 @@ from modules.torch_bpla import (
     TorchBPLAActivation,
     TorchBPLAConfig,
     TorchBPLALinear,
+    bpla_matmul_torch,
     bpla_multiply_torch,
     calibrate_model_activation_range,
     replace_linear_and_gelu,
@@ -42,6 +43,14 @@ class TorchBPLAProxyTests(unittest.TestCase):
         layer = torch.nn.Linear(8, 6)
         out = TorchBPLALinear(layer, cfg)(torch.randn(5, 8))
         self.assertEqual(out.shape, (5, 6))
+        self.assertTrue(torch.isfinite(out).all().item())
+
+    def test_torch_batched_matmul_proxy_runs(self):
+        cfg = TorchBPLAConfig(prefix_bits=3, affine_path="dyadic", dyadic_terms=2, linear_chunk_out=2)
+        a = torch.randn(2, 3, 4, 5)
+        b = torch.randn(2, 3, 5, 6)
+        out = bpla_matmul_torch(a, b, cfg)
+        self.assertEqual(out.shape, (2, 3, 4, 6))
         self.assertTrue(torch.isfinite(out).all().item())
 
     def test_converted_modules_share_multiplier_and_activation_tables(self):

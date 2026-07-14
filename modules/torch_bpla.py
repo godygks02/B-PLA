@@ -16,6 +16,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers.pytorch_utils import Conv1D
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
+from transformers.models.vit.modeling_vit import ViTSelfAttention
 
 
 @dataclass(frozen=True)
@@ -159,6 +162,80 @@ def bpla_linear_torch(
             out = out + bias[start : start + chunk]
         rows.append(out)
     return torch.cat(rows, dim=-1).reshape(*original_shape, weight.shape[0])
+
+
+def bpla_matmul_torch(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    config: TorchBPLAConfig,
+    tables: SharedBPLATables | None = None,
+) -> torch.Tensor:
+    """Batched B-PLA matmul for tensors shaped ``[..., M, K] @ [..., K, N]``."""
+
+    _validate_config(config)
+    if a.ndim < 2 or b.ndim < 2:
+        raise ValueError("B-PLA matmul inputs must have at least two dimensions.")
+    if a.shape[-1] != b.shape[-2]:
+        raise ValueError(f"Incompatible B-PLA matmul shapes: {tuple(a.shape)} and {tuple(b.shape)}")
+
+    outputs = []
+    chunk = max(1, config.linear_chunk_out)
+    for start in range(0, b.shape[-1], chunk):
+        b_chunk = b[..., :, start : start + chunk]
+        products = bpla_multiply_torch(
+            a.unsqueeze(-2),
+            b_chunk.transpose(-1, -2).unsqueeze(-3),
+            config,
+            tables,
+        )
+        outputs.append(products.sum(dim=-1))
+    return torch.cat(outputs, dim=-1)
+
+
+def replace_attention_matmuls(
+    module: nn.Module,
+    config: TorchBPLAConfig,
+    tables: SharedBPLATables,
+) -> int:
+    """Route ViT/GPT-2 QK and attention-value matmuls through B-PLA."""
+
+    attention_modules = [child for child in module.modules() if isinstance(child, (ViTSelfAttention, GPT2Attention))]
+    if not attention_modules:
+        return 0
+
+    interface_name = f"bpla_{id(tables)}"
+
+    def bpla_attention_forward(
+        attention_module: nn.Module,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        scaling: float | None = None,
+        dropout: float = 0.0,
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        del kwargs
+        if scaling is None:
+            scaling = query.size(-1) ** -0.5
+
+        attention_weights = bpla_matmul_torch(query, key.transpose(-1, -2), config, tables) * scaling
+        if attention_mask is not None:
+            attention_weights = attention_weights + attention_mask
+        attention_weights = nn.functional.softmax(attention_weights, dim=-1)
+        attention_weights = attention_weights.type(value.dtype)
+        attention_weights = nn.functional.dropout(
+            attention_weights,
+            p=dropout,
+            training=attention_module.training,
+        )
+        attention_output = bpla_matmul_torch(attention_weights, value, config, tables)
+        return attention_output.transpose(1, 2), attention_weights
+
+    ALL_ATTENTION_FUNCTIONS.register(interface_name, bpla_attention_forward)
+    for attention_module in attention_modules:
+        attention_module.config._attn_implementation = interface_name
+    return len(attention_modules)
 
 
 def _gelu(x: torch.Tensor) -> torch.Tensor:

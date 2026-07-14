@@ -5,11 +5,11 @@ B-PLA-SNN Activation
 Prefix-routed piecewise-linear spiking activation module.
 
 This module reinterprets a B-PLA activation table as a bank of segment-specific
-spiking neurons. Inputs are encoded as fixed-point bit-plane spike streams. The
-default neuron is an FS-style Few-Spikes neuron: it emits a coarse-to-fine binary
-spike pattern so each neuron uses only a small number of spikes. A PAM-inspired
-progressive level mode can accumulate coarse-to-fine PLA residual corrections
-as more input bits arrive. An IF baseline is also provided for ablation.
+spiking neurons. PLA slopes are compiled offline into per-bit-plane synaptic
+increments. At runtime, binary input events gate additions into the membrane;
+there is no slope-by-activation multiplication and no dyadic term budget. The
+default neuron emits an FS-style Few-Spikes output. An IF baseline is provided
+for ablation.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from typing import Literal
 import numpy as np
 
 from modules import bpla_activation as _bpla_activation
+from modules import pla_snn
 
 
 NeuronType = Literal["fs", "if"]
@@ -40,11 +41,12 @@ class BPLASpikingNeuronConfig:
     bit_width: int = 12
     fractional_bits: int = 8
     prefix_bits: int = 4
-    progressive_levels: bool = True
     target_name: str = "gelu"
     x_min: float = -4.0
     x_max: float = 4.0
     min_e_routing: int = -5
+    coefficient_bits: int = 24
+    coefficient_fractional_bits: int = 18
 
 
 def _validate_encoding_config(config: BitPlaneEncodingConfig) -> None:
@@ -89,7 +91,7 @@ def encode_bitplane_spikes(
         bit_positions = bit_positions[::-1]
     spikes = ((magnitude[..., None] >> bit_positions) & 1).astype(np.uint8)
     weights = np.exp2(bit_positions.astype(np.float64) - config.fractional_bits)
-    decoded_mag = np.sum(spikes.astype(np.float64) * weights, axis=-1)
+    decoded_mag = np.sum(np.where(spikes.astype(bool), weights, 0.0), axis=-1)
     decoded = decoded_mag * sign
 
     return {
@@ -154,112 +156,37 @@ def _emit_few_spikes(
         fire_neg = residual_neg >= weight
         count_pos += fire_pos.astype(np.int64)
         count_neg += fire_neg.astype(np.int64)
-        decoded_pos += fire_pos.astype(np.float64) * weight
-        decoded_neg += fire_neg.astype(np.float64) * weight
-        residual_pos -= fire_pos.astype(np.float64) * weight
-        residual_neg -= fire_neg.astype(np.float64) * weight
+        decoded_pos += np.where(fire_pos, weight, 0.0)
+        decoded_neg += np.where(fire_neg, weight, 0.0)
+        residual_pos -= np.where(fire_pos, weight, 0.0)
+        residual_neg -= np.where(fire_neg, weight, 0.0)
 
     decoded = decoded_pos - decoded_neg
     events = count_pos + count_neg
     return decoded, count_pos, count_neg, events
 
 
-def _run_fs_neuron(
-    x_stream: np.ndarray,
-    slope: np.ndarray,
-    intercept: np.ndarray,
-    threshold: float,
-    timesteps: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    membrane = slope * x_stream + intercept
-    return _emit_few_spikes(membrane, threshold, timesteps)
-
-
-def _build_level_tables(
-    target_name: str,
-    max_prefix_bits: int,
-    x_min: float,
-    x_max: float,
-    min_e_routing: int,
-) -> list[_bpla_activation.BPLAActivationTable]:
-    return [
-        _bpla_activation.build_activation_table(
-            target_name=target_name,
-            prefix_bits=level,
-            x_min=x_min,
-            x_max=x_max,
-            min_e_routing=min_e_routing,
-        )
-        for level in range(1, max_prefix_bits + 1)
-    ]
-
-
-def _progressive_pla_activation_value(
-    x_stream: np.ndarray,
-    config: BPLASpikingNeuronConfig,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Accumulate PAM-style level residuals for 1D activation PLA.
-
-    Level `l` computes a PLA approximation with `l` prefix bits. The neuron
-    starts from the coarsest level and adds each residual f_l - f_{l-1}, so the
-    timestep/level directly controls approximation fidelity.
-    """
-
-    tables = _build_level_tables(
-        config.target_name,
-        config.prefix_bits,
-        config.x_min,
-        config.x_max,
-        config.min_e_routing,
+def _synapse_config(config: BPLASpikingNeuronConfig) -> pla_snn.SynapticFixedPointConfig:
+    return pla_snn.SynapticFixedPointConfig(
+        total_bits=config.coefficient_bits,
+        fractional_bits=config.coefficient_fractional_bits,
     )
-    previous = np.zeros_like(x_stream, dtype=np.float64)
-    membrane = np.zeros_like(x_stream, dtype=np.float64)
-    indices = []
-    level_values = []
-    residual_abs_sum = np.zeros_like(x_stream, dtype=np.float64)
-    for table in tables:
-        idx = _bpla_activation._prefix_index(x_stream, table)
-        current = table.slopes[idx] * np.clip(x_stream, table.x_min, table.x_max) + table.intercepts[idx]
-        residual = current - previous
-        membrane += residual
-        residual_abs_sum += np.abs(residual)
-        previous = current
-        indices.append(idx)
-        level_values.append(membrane.copy())
-    return membrane, np.stack(indices, axis=-1), residual_abs_sum, np.stack(level_values, axis=-1)
 
 
-def _run_if_neuron(
-    spikes: np.ndarray,
-    weights: np.ndarray,
-    sign: np.ndarray,
-    slope: np.ndarray,
-    intercept: np.ndarray,
-    threshold: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    shape = slope.shape
-    membrane = np.zeros(shape, dtype=np.float64)
-    pos_count = np.zeros(shape, dtype=np.int64)
-    neg_count = np.zeros(shape, dtype=np.int64)
-    signed_spikes = spikes.astype(np.float64) * sign[..., None].astype(np.float64)
-    timesteps = spikes.shape[-1]
-
-    for t in range(timesteps):
-        membrane += slope * signed_spikes[..., t] * weights[t] + intercept / float(timesteps)
-        pos_fire = membrane >= threshold
-        neg_fire = membrane <= -threshold
-        if np.any(pos_fire):
-            n_fire = np.floor(membrane[pos_fire] / threshold).astype(np.int64)
-            pos_count[pos_fire] += n_fire
-            membrane[pos_fire] -= n_fire.astype(np.float64) * threshold
-        if np.any(neg_fire):
-            n_fire = np.floor(-membrane[neg_fire] / threshold).astype(np.int64)
-            neg_count[neg_fire] += n_fire
-            membrane[neg_fire] += n_fire.astype(np.float64) * threshold
-
-    decoded = (pos_count - neg_count).astype(np.float64) * threshold
-    events = (pos_count + neg_count).astype(np.int64)
-    return decoded, pos_count, neg_count, events
+def _compile_selected_synapses(
+    table: _bpla_activation.BPLAActivationTable,
+    table_indices: np.ndarray,
+    encoded: dict[str, np.ndarray],
+    config: BPLASpikingNeuronConfig,
+) -> tuple[np.ndarray, np.ndarray]:
+    compiled = pla_snn.compile_affine_synapses(
+        table.slopes,
+        table.intercepts,
+        encoded["bit_positions"],
+        config.fractional_bits,
+        _synapse_config(config),
+    )
+    return compiled.increments[table_indices], compiled.bias[table_indices]
 
 
 def bpla_snn_activation(
@@ -293,44 +220,32 @@ def bpla_snn_activation(
         )
 
     table_indices = _bpla_activation._prefix_index(x_stream, table)
-    slope = table.slopes[table_indices]
-    intercept = table.intercepts[table_indices]
+    increments, bias = _compile_selected_synapses(table, table_indices, encoded, config)
 
     if config.neuron_type == "fs":
-        if config.progressive_levels:
-            membrane, level_indices, residual_abs_sum, level_values = _progressive_pla_activation_value(x_stream, config)
-            decoded, pos, neg, events = _emit_few_spikes(membrane, config.threshold, config.bit_width)
-            table_indices = level_indices[..., -1]
-        else:
-            decoded, pos, neg, events = _run_fs_neuron(
-                x_stream,
-                slope,
-                intercept,
-                config.threshold,
-                config.bit_width,
-            )
-            level_indices = table_indices[..., None]
-            residual_abs_sum = np.abs(slope * x_stream + intercept)
-            level_values = (slope * x_stream + intercept)[..., None]
-    else:
-        decoded, pos, neg, events = _run_if_neuron(
+        membrane, input_event_adds = pla_snn.event_affine_accumulate(
             encoded["spikes"],
-            encoded["weights"],
             encoded["sign"],
-            slope,
-            intercept,
+            increments,
+            bias,
+        )
+        decoded, pos, neg, events = _emit_few_spikes(membrane, config.threshold, config.bit_width)
+    else:
+        decoded, pos, neg, events, input_event_adds = pla_snn.event_if_decode(
+            encoded["spikes"],
+            encoded["sign"],
+            increments,
+            bias,
             config.threshold,
         )
-        level_indices = table_indices[..., None]
-        residual_abs_sum = np.abs(slope * x_stream + intercept)
-        level_values = (slope * x_stream + intercept)[..., None]
 
     simple_prefix = prefix_index_from_bitplanes(encoded["spikes"], config.prefix_bits)
     ops = {
         "lut_reads": float(np.size(decoded)),
         "spike_events": float(np.sum(events)),
-        "accumulate_ops": float(np.sum(encoded["spikes"]) + config.prefix_bits * np.size(decoded)),
+        "accumulate_ops": float(np.sum(input_event_adds) + config.prefix_bits * np.size(decoded)),
         "threshold_compares": float(np.size(decoded) * config.bit_width),
+        "runtime_multiplications": 0.0,
     }
     return {
         "decoded": decoded.astype(np.float64),
@@ -338,9 +253,6 @@ def bpla_snn_activation(
         "spike_count_neg": neg,
         "spike_events": events,
         "prefix_indices": table_indices,
-        "level_indices": level_indices,
-        "level_values": level_values,
-        "level_residual_abs_sum": residual_abs_sum,
         "bitplane_prefix_indices": simple_prefix,
         "ops": ops,
     }

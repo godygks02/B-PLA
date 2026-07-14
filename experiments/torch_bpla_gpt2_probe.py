@@ -29,6 +29,7 @@ from modules.torch_bpla import (
     TorchBPLAActivation,
     TorchBPLAConfig,
     calibrate_model_activation_range,
+    replace_attention_matmuls,
     replace_gpt2_conv1d_and_gelu,
 )
 
@@ -76,7 +77,7 @@ def convert_model(
     model: GPT2LMHeadModel,
     args: argparse.Namespace,
     cfg: TorchBPLAConfig | None = None,
-) -> tuple[GPT2LMHeadModel, int, int]:
+) -> tuple[GPT2LMHeadModel, int, int, int]:
     cfg = cfg or build_config(args)
     tables = SharedBPLATables(cfg)
     replaced = replace_gpt2_conv1d_and_gelu(
@@ -88,7 +89,10 @@ def convert_model(
         tables=tables,
     )
     replaced_activations = sum(1 for child in model.modules() if isinstance(child, TorchBPLAActivation))
-    return model, replaced, replaced_activations
+    replaced_attention = 0
+    if not args.no_attention:
+        replaced_attention = replace_attention_matmuls(model, cfg, tables)
+    return model, replaced, replaced_activations, replaced_attention
 
 
 def evaluate_ppl(
@@ -238,6 +242,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-conv1d-modules", type=int, default=None)
     parser.add_argument("--no-conv1d", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
+    parser.add_argument("--no-attention", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--smoke-text", default="The quick brown fox jumps over the lazy dog.")
@@ -253,13 +258,14 @@ def main() -> None:
     if args.dry_run:
         ann = make_dry_run_model(device)
         probe = copy.deepcopy(ann)
-        probe, replaced, replaced_activations = convert_model(probe, args)
+        probe, replaced, replaced_activations, replaced_attention = convert_model(probe, args)
         input_ids = torch.randint(0, ann.config.vocab_size, (1, 16), device=device)
         stats = compare_logits(ann, probe, input_ids)
         print("\nGPT-2 B-PLA dry run")
         print("=" * 72)
         print(f"replaced Conv1D modules  : {replaced}")
         print(f"replaced act callables   : {replaced_activations}")
+        print(f"replaced attention blocks: {replaced_attention}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
         return
@@ -288,9 +294,10 @@ def main() -> None:
         cfg = TorchBPLAConfig(**{**cfg.__dict__, "activation_range": measured_range})
         print(f"Calibrated shared GELU range: +/-{measured_range:.6f}")
     probe = copy.deepcopy(ann)
-    probe, replaced, replaced_activations = convert_model(probe, args, cfg)
+    probe, replaced, replaced_activations, replaced_attention = convert_model(probe, args, cfg)
     print(f"Replaced Conv1D modules: {replaced}")
     print(f"Replaced activation callables: {replaced_activations}")
+    print(f"Replaced attention blocks: {replaced_attention}")
 
     if args.stop_after_conversion:
         sample = tokenizer(args.smoke_text, return_tensors="pt").input_ids[:, : min(32, args.max_length)].to(device)
@@ -320,6 +327,7 @@ def main() -> None:
     print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
     print(f"replaced Conv1D modules  : {replaced}")
     print(f"replaced act callables   : {replaced_activations}")
+    print(f"replaced attention blocks: {replaced_attention}")
     if comparison is not None:
         print(f"ANN PPL                  : {comparison['ann_ppl']:.4f}")
     print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")

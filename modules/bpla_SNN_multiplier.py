@@ -6,10 +6,10 @@ Spiking reinterpretation of the B-PLA mantissa interaction approximation.
 
 The FP32 sign and exponent paths remain deterministic conversion logic. The
 nonlinear mantissa interaction term is evaluated as a prefix-routed PLA spiking
-operator over fixed-point bit-plane spike streams. The default FS mode means
-Few-Spikes, using coarse-to-fine spike timing rather than rate-style spike count.
-The FS path uses a PAM-inspired progressive level approximation: each timestep
-adds a residual correction between a coarser and a finer mantissa partition.
+operator over fixed-point bit-plane streams. Tile coefficients are compiled
+offline into synaptic increments; runtime multiplication is replaced by binary
+event-gated accumulation. The default FS mode means Few-Spikes rather than
+rate-style spike count.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from typing import Literal
 import numpy as np
 
 from modules import bpla_multiplier as _bpla_multiplier
+from modules import pla_snn
 
 
 NeuronType = Literal["fs", "if"]
@@ -31,7 +32,8 @@ class BPLASpikingMultiplierConfig:
     prefix_bits: int = 4
     neuron_type: NeuronType = "fs"
     threshold: float = 1.0 / 4096.0
-    progressive_levels: bool = True
+    coefficient_bits: int = 24
+    coefficient_fractional_bits: int = 18
 
 
 def _validate_config(config: BPLASpikingMultiplierConfig) -> None:
@@ -63,7 +65,7 @@ def encode_mantissa_bitplanes(
     bit_positions = np.arange(frac_bits - 1, -1, -1, dtype=np.uint64)
     spikes = ((rounded[..., None] >> bit_positions) & 1).astype(np.uint8)
     weights = np.exp2(bit_positions.astype(np.float64) - frac_bits)
-    decoded = np.sum(spikes.astype(np.float64) * weights, axis=-1)
+    decoded = np.sum(np.where(spikes.astype(bool), weights, 0.0), axis=-1)
     return {
         "spikes": spikes,
         "q_fraction": rounded.astype(np.uint64),
@@ -78,11 +80,6 @@ def _prefix_index_from_quantized(q_fraction: np.ndarray, config: BPLASpikingMult
     return (np.asarray(q_fraction, dtype=np.uint64) >> shift).astype(np.int64)
 
 
-def _prefix_index_for_level(q_fraction: np.ndarray, mantissa_bits: int, level: int) -> np.ndarray:
-    shift = mantissa_bits - level
-    return (np.asarray(q_fraction, dtype=np.uint64) >> shift).astype(np.int64)
-
-
 def _emit_few_spikes(value: np.ndarray, threshold: float, timesteps: int) -> tuple[np.ndarray, np.ndarray]:
     residual = np.asarray(value, dtype=np.float64).copy()
     decoded = np.zeros_like(residual, dtype=np.float64)
@@ -93,91 +90,46 @@ def _emit_few_spikes(value: np.ndarray, threshold: float, timesteps: int) -> tup
     for weight in weights:
         fire = residual_mag >= weight
         events += fire.astype(np.int64)
-        decoded += fire.astype(np.float64) * weight * signs
-        residual_mag -= fire.astype(np.float64) * weight
+        signed_weight = np.where(signs < 0, -weight, weight)
+        decoded += np.where(fire, signed_weight, 0.0)
+        residual_mag -= np.where(fire, weight, 0.0)
     return decoded, events
 
 
-def _pla_cross_for_level(
-    mant_a: np.ndarray,
-    mant_b: np.ndarray,
-    q_a: np.ndarray,
-    q_b: np.ndarray,
-    mantissa_bits: int,
-    level: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """PAM-style level-l local affine approximation to m_a*m_b."""
-
-    idx_a = _prefix_index_for_level(q_a, mantissa_bits, level)
-    idx_b = _prefix_index_for_level(q_b, mantissa_bits, level)
-    segments = 1 << level
-    centers = (np.arange(segments, dtype=np.float64) + 0.5) / float(segments)
-    mu = centers[idx_a]
-    nu = centers[idx_b]
-    cross = nu * mant_a + mu * mant_b - mu * nu
-    return cross, idx_a, idx_b
+def _synapse_config(config: BPLASpikingMultiplierConfig) -> pla_snn.SynapticFixedPointConfig:
+    return pla_snn.SynapticFixedPointConfig(
+        total_bits=config.coefficient_bits,
+        fractional_bits=config.coefficient_fractional_bits,
+    )
 
 
-def _progressive_cross(
-    mant_a: np.ndarray,
-    mant_b: np.ndarray,
-    q_a: np.ndarray,
-    q_b: np.ndarray,
+def _compile_selected_tile_synapses(
+    coeffs: _bpla_multiplier.BPLACoefficients,
+    idx_a: np.ndarray,
+    idx_b: np.ndarray,
+    bit_positions: np.ndarray,
     config: BPLASpikingMultiplierConfig,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Accumulate f_l - f_{l-1} residuals over PAM-style levels."""
-
-    previous = np.zeros_like(mant_a, dtype=np.float64)
-    membrane = np.zeros_like(mant_a, dtype=np.float64)
-    residual_abs_sum = np.zeros_like(mant_a, dtype=np.float64)
-    level_pairs = []
-    level_values = []
-    for level in range(1, config.prefix_bits + 1):
-        current, idx_a, idx_b = _pla_cross_for_level(
-            mant_a,
-            mant_b,
-            q_a,
-            q_b,
-            config.mantissa_bits,
-            level,
-        )
-        residual = current - previous
-        membrane += residual
-        residual_abs_sum += np.abs(residual)
-        previous = current
-        level_pairs.append(np.stack([idx_a, idx_b], axis=-1))
-        level_values.append(membrane.copy())
-    return membrane, level_pairs[-1], np.stack(level_pairs, axis=-2), residual_abs_sum, np.stack(level_values, axis=-1)
-
-
-def _if_accumulate(
-    spikes_a: np.ndarray,
-    spikes_b: np.ndarray,
-    weights: np.ndarray,
-    coeff_a: np.ndarray,
-    coeff_b: np.ndarray,
-    coeff_c: np.ndarray,
-    threshold: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    membrane = np.zeros(coeff_a.shape, dtype=np.float64)
-    signed_count = np.zeros(coeff_a.shape, dtype=np.int64)
-    timesteps = spikes_a.shape[-1]
-    for t in range(timesteps):
-        membrane += coeff_a * spikes_a[..., t] * weights[t]
-        membrane += coeff_b * spikes_b[..., t] * weights[t]
-        membrane += coeff_c / float(timesteps)
-        pos_fire = membrane >= threshold
-        neg_fire = membrane <= -threshold
-        if np.any(pos_fire):
-            n_fire = np.floor(membrane[pos_fire] / threshold).astype(np.int64)
-            signed_count[pos_fire] += n_fire
-            membrane[pos_fire] -= n_fire.astype(np.float64) * threshold
-        if np.any(neg_fire):
-            n_fire = np.floor(-membrane[neg_fire] / threshold).astype(np.int64)
-            signed_count[neg_fire] -= n_fire
-            membrane[neg_fire] += n_fire.astype(np.float64) * threshold
-    decoded = signed_count.astype(np.float64) * threshold
-    return decoded, np.abs(signed_count).astype(np.int64)
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    zeros = np.zeros_like(coeffs.c, dtype=np.float64)
+    compiled_a = pla_snn.compile_affine_synapses(
+        coeffs.a,
+        coeffs.c,
+        bit_positions,
+        config.mantissa_bits,
+        _synapse_config(config),
+    )
+    compiled_b = pla_snn.compile_affine_synapses(
+        coeffs.b,
+        zeros,
+        bit_positions,
+        config.mantissa_bits,
+        _synapse_config(config),
+    )
+    return (
+        compiled_a.increments[idx_a, idx_b],
+        compiled_b.increments[idx_a, idx_b],
+        compiled_a.bias[idx_a, idx_b],
+    )
 
 
 def bpla_snn_multiply(
@@ -210,41 +162,25 @@ def bpla_snn_multiply(
     mant_b = enc_b["decoded"]
 
     if config.neuron_type == "fs":
-        if config.progressive_levels:
-            cross_raw, final_pairs, level_pairs, residual_abs_sum, level_values = _progressive_cross(
-                mant_a,
-                mant_b,
-                enc_a["q_fraction"],
-                enc_b["q_fraction"],
-                config,
-            )
-            idx_a = final_pairs[..., 0]
-            idx_b = final_pairs[..., 1]
-        else:
-            ca = coeffs.a[idx_a, idx_b]
-            cb = coeffs.b[idx_a, idx_b]
-            cc = coeffs.c[idx_a, idx_b]
-            cross_raw = ca * mant_a + cb * mant_b + cc
-            level_pairs = np.stack([idx_a, idx_b], axis=-1)[..., None, :]
-            residual_abs_sum = np.abs(cross_raw)
-            level_values = cross_raw[..., None]
+        increments_a, increments_b, bias = _compile_selected_tile_synapses(
+            coeffs, idx_a, idx_b, enc_a["bit_positions"], config
+        )
+        cross_raw, input_event_adds = pla_snn.event_dual_affine_accumulate(
+            enc_a["spikes"], enc_b["spikes"], increments_a, increments_b, bias
+        )
         cross, cross_events = _emit_few_spikes(cross_raw, config.threshold, config.mantissa_bits)
     else:
-        ca = coeffs.a[idx_a, idx_b]
-        cb = coeffs.b[idx_a, idx_b]
-        cc = coeffs.c[idx_a, idx_b]
-        cross, cross_events = _if_accumulate(
+        increments_a, increments_b, bias = _compile_selected_tile_synapses(
+            coeffs, idx_a, idx_b, enc_a["bit_positions"], config
+        )
+        cross, cross_events, input_event_adds = pla_snn.event_dual_if_decode(
             enc_a["spikes"],
             enc_b["spikes"],
-            enc_a["weights"],
-            ca,
-            cb,
-            cc,
+            increments_a,
+            increments_b,
+            bias,
             config.threshold,
         )
-        level_pairs = np.stack([idx_a, idx_b], axis=-1)[..., None, :]
-        residual_abs_sum = np.abs(cross)
-        level_values = cross[..., None]
 
     sign = pa.sign ^ pb.sign
     valid = pa.normal & pb.normal
@@ -261,18 +197,16 @@ def bpla_snn_multiply(
     ops = {
         "lut_reads": float(np.size(decoded)),
         "spike_events": float(np.sum(input_events + cross_events)),
-        "accumulate_ops": float(np.sum(input_events) * 2 + config.prefix_bits * np.size(decoded)),
+        "accumulate_ops": float(np.sum(input_event_adds) + config.prefix_bits * np.size(decoded)),
         "threshold_compares": float(np.size(decoded) * config.mantissa_bits),
+        "runtime_multiplications": 0.0,
     }
     return {
         "decoded": decoded.astype(np.float64),
         "spike_events": (input_events + cross_events).astype(np.int64),
         "lut_reads": np.ones_like(decoded, dtype=np.int64),
-        "accumulate_ops": (input_events * 2 + 1).astype(np.int64),
+        "accumulate_ops": (input_event_adds + 1).astype(np.int64),
         "prefix_indices": np.stack([idx_a, idx_b], axis=-1),
-        "level_indices": level_pairs,
-        "level_values": level_values,
-        "level_residual_abs_sum": residual_abs_sum,
         "ops": ops,
     }
 

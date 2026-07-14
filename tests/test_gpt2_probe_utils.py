@@ -33,11 +33,13 @@ class GPT2ProbeUtilityTests(unittest.TestCase):
             linear_chunk_out=4,
             no_conv1d=True,
             no_gelu=False,
+            no_attention=True,
             max_conv1d_modules=None,
         )
-        _, replaced_conv, replaced_activations = convert_model(model, args)
+        _, replaced_conv, replaced_activations, replaced_attention = convert_model(model, args)
         self.assertEqual(replaced_conv, 0)
         self.assertEqual(replaced_activations, model.config.n_layer)
+        self.assertEqual(replaced_attention, 0)
 
 
 if __name__ == "__main__":

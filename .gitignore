@@ -16,6 +16,7 @@ checkpoints/
 outputs/
 runs/
 wandb/
+B_PLA_vault/
 
 *.pth
 *.pt

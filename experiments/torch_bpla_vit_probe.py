@@ -29,6 +29,7 @@ from modules.torch_bpla import (
     TorchBPLAConfig,
     TorchBPLALinear,
     calibrate_model_activation_range,
+    replace_attention_matmuls,
     replace_linear_and_gelu,
 )
 
@@ -111,7 +112,7 @@ def convert_model(
     model: ViTForImageClassification,
     args: argparse.Namespace,
     cfg: TorchBPLAConfig | None = None,
-) -> tuple[ViTForImageClassification, int, int]:
+) -> tuple[ViTForImageClassification, int, int, int]:
     cfg = cfg or build_config(args)
     tables = SharedBPLATables(cfg)
     replaced_linear = replace_linear_and_gelu(
@@ -125,7 +126,10 @@ def convert_model(
     replaced_act_fn = 0
     if not args.no_gelu:
         replaced_act_fn = replace_vit_intermediate_activations(model, cfg, tables)
-    return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model))
+    replaced_attention = 0
+    if not args.no_attention:
+        replaced_attention = replace_attention_matmuls(model, cfg, tables)
+    return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model)), replaced_attention
 
 
 def prepare_imagenette(args: argparse.Namespace):
@@ -201,6 +205,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-linear-modules", type=int, default=None)
     parser.add_argument("--no-linear", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
+    parser.add_argument("--no-attention", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--list-replaced-modules", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
@@ -216,13 +221,14 @@ def main() -> None:
     if args.dry_run:
         ann = make_dry_run_model(device)
         probe = copy.deepcopy(ann)
-        probe, replaced_linear, replaced_act = convert_model(probe, args)
+        probe, replaced_linear, replaced_act, replaced_attention = convert_model(probe, args)
         pixels = torch.randn(2, 3, 32, 32, device=device)
         stats = compare_logits(ann, probe, pixels)
         print("\nViT B-PLA dry run")
         print("=" * 72)
         print(f"replaced Linear modules  : {replaced_linear}")
         print(f"replaced act callables   : {replaced_act}")
+        print(f"replaced attention blocks: {replaced_attention}")
         if args.list_replaced_modules:
             linear_names, activation_names = list_replaced_modules(probe)
             print("replaced Linear names    :")
@@ -250,9 +256,10 @@ def main() -> None:
         cfg = TorchBPLAConfig(**{**cfg.__dict__, "activation_range": measured_range})
         print(f"Calibrated shared GELU range: +/-{measured_range:.6f}")
     probe = copy.deepcopy(ann)
-    probe, replaced_linear, replaced_act = convert_model(probe, args, cfg)
+    probe, replaced_linear, replaced_act, replaced_attention = convert_model(probe, args, cfg)
     print(f"Replaced Linear modules: {replaced_linear}")
     print(f"Replaced activation callables: {replaced_act}")
+    print(f"Replaced attention blocks: {replaced_attention}")
     if args.list_replaced_modules:
         linear_names, activation_names = list_replaced_modules(probe)
         print("Replaced Linear module names:")
@@ -287,6 +294,7 @@ def main() -> None:
     print(f"affine path              : {args.affine_path} (terms={args.dyadic_terms}, prefix={args.prefix_bits})")
     print(f"replaced Linear modules  : {replaced_linear}")
     print(f"replaced act callables   : {replaced_act}")
+    print(f"replaced attention blocks: {replaced_attention}")
     print(f"B-PLA Top-1 / Top-5      : {top1:.2f}% / {top5:.2f}%")
     if ann_logits is not None:
         if ann_logits.shape != bpla_logits.shape:
