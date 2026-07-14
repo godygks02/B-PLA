@@ -111,6 +111,21 @@ python experiments/torch_bpla_gpt2_probe.py --stop-after-conversion --max-conv1d
 python experiments/torch_bpla_gpt2_probe.py --num-windows 1 --max-conv1d-modules 4 --affine-path dyadic --dyadic-terms 2 --linear-chunk-out 128
 ```
 
+Diagnose GPT-2 attention independently from Conv1D and GELU replacement:
+
+```bash
+python experiments/torch_bpla_gpt2_probe.py --num-windows 10 --max-length 32 --stride 32 --no-conv1d --no-gelu --evaluate-ann --attention-mode exact --attention-diagnostics
+python experiments/torch_bpla_gpt2_probe.py --num-windows 10 --max-length 32 --stride 32 --no-conv1d --no-gelu --evaluate-ann --attention-mode bpla-qk --attention-diagnostics --affine-path float --prefix-bits 4
+python experiments/torch_bpla_gpt2_probe.py --num-windows 10 --max-length 32 --stride 32 --no-conv1d --no-gelu --evaluate-ann --attention-mode bpla-pv --attention-diagnostics --affine-path float --prefix-bits 4
+python experiments/torch_bpla_gpt2_probe.py --num-windows 10 --max-length 32 --stride 32 --no-conv1d --no-gelu --evaluate-ann --attention-mode bpla-full --attention-diagnostics --affine-path float --prefix-bits 4
+```
+
+`exact` validates the custom attention interface with native matmul. `bpla-qk`
+approximates only the attention-score product, `bpla-pv` approximates only the
+probability-value product, and `bpla-full` approximates both. Diagnostics record
+the first attention call's QK-score, Softmax-probability, attention-output, and
+masked-probability errors against exact matmul.
+
 ## Notes
 
 The PyTorch B-PLA path is a CUDA-friendly sensitivity proxy. It is intended to

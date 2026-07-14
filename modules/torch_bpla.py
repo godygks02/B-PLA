@@ -10,7 +10,7 @@ class of B-PLA approximation?"
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 import torch
 import torch.nn as nn
@@ -37,6 +37,59 @@ class TorchBPLAConfig:
     activation_range: float = 4.0
     activation_samples_per_segment: int = 64
     linear_chunk_out: int = 32
+
+
+AttentionMode = Literal["exact", "bpla-qk", "bpla-pv", "bpla-full"]
+
+
+@dataclass
+class AttentionDiagnostics:
+    """First-call comparison between a custom attention path and exact matmul."""
+
+    mode: AttentionMode
+    recorded: bool = False
+    layer_index: int | None = None
+    qk_score_mae: float | None = None
+    softmax_probability_mae: float | None = None
+    attention_output_mae: float | None = None
+    masked_probability_max: float | None = None
+
+    def record(
+        self,
+        attention_module: nn.Module,
+        selected_scores: torch.Tensor,
+        exact_scores: torch.Tensor,
+        selected_probabilities: torch.Tensor,
+        exact_probabilities: torch.Tensor,
+        selected_output: torch.Tensor,
+        exact_output: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+    ) -> None:
+        if self.recorded:
+            return
+        self.layer_index = getattr(attention_module, "layer_idx", None)
+        self.qk_score_mae = float((selected_scores - exact_scores).abs().mean().item())
+        self.softmax_probability_mae = float(
+            (selected_probabilities - exact_probabilities).abs().mean().item()
+        )
+        self.attention_output_mae = float((selected_output - exact_output).abs().mean().item())
+        self.masked_probability_max = _masked_probability_max(selected_probabilities, attention_mask)
+        self.recorded = True
+
+
+def _masked_probability_max(
+    probabilities: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+) -> float | None:
+    """Return the largest probability at additive-mask positions, if present."""
+
+    if attention_mask is None or not torch.is_floating_point(attention_mask):
+        return None
+    masked = attention_mask < -1.0e4
+    if not bool(masked.any().item()):
+        return None
+    masked = masked.expand_as(probabilities)
+    return float(probabilities.masked_select(masked).abs().max().item())
 
 
 class SharedBPLATables:
@@ -203,8 +256,16 @@ def replace_attention_matmuls(
     module: nn.Module,
     config: TorchBPLAConfig,
     tables: SharedBPLATables,
+    mode: AttentionMode = "bpla-full",
+    diagnostics: AttentionDiagnostics | None = None,
 ) -> int:
-    """Route ViT/GPT-2 QK and attention-value matmuls through B-PLA."""
+    """Install an exact or selectively approximated ViT/GPT-2 attention path."""
+
+    valid_modes = {"exact", "bpla-qk", "bpla-pv", "bpla-full"}
+    if mode not in valid_modes:
+        raise ValueError(f"Unknown attention mode {mode!r}. Choose one of {sorted(valid_modes)}.")
+    if diagnostics is not None and diagnostics.mode != mode:
+        raise ValueError("diagnostics.mode must match the requested attention mode.")
 
     attention_modules = [child for child in module.modules() if isinstance(child, (ViTAttentionModule, GPT2Attention))]
     if not attention_modules:
@@ -226,22 +287,54 @@ def replace_attention_matmuls(
         if scaling is None:
             scaling = query.size(-1) ** -0.5
 
-        attention_weights = bpla_matmul_torch(query, key.transpose(-1, -2), config, tables) * scaling
+        use_bpla_qk = mode in {"bpla-qk", "bpla-full"}
+        use_bpla_pv = mode in {"bpla-pv", "bpla-full"}
+        if use_bpla_qk:
+            attention_scores = bpla_matmul_torch(query, key.transpose(-1, -2), config, tables)
+        else:
+            attention_scores = torch.matmul(query, key.transpose(-1, -2))
+        attention_scores = attention_scores * scaling
+
+        attention_weights = attention_scores
         if attention_mask is not None:
             attention_weights = attention_weights + attention_mask
         attention_weights = nn.functional.softmax(attention_weights, dim=-1)
         attention_weights = attention_weights.type(value.dtype)
+        attention_probabilities = attention_weights
         attention_weights = nn.functional.dropout(
             attention_weights,
             p=dropout,
             training=attention_module.training,
         )
-        attention_output = bpla_matmul_torch(attention_weights, value, config, tables)
+        if use_bpla_pv:
+            attention_output = bpla_matmul_torch(attention_weights, value, config, tables)
+        else:
+            attention_output = torch.matmul(attention_weights, value)
+
+        if diagnostics is not None and not diagnostics.recorded:
+            exact_scores = torch.matmul(query, key.transpose(-1, -2)) * scaling
+            exact_weights = exact_scores
+            if attention_mask is not None:
+                exact_weights = exact_weights + attention_mask
+            exact_probabilities = nn.functional.softmax(exact_weights, dim=-1).type(value.dtype)
+            exact_output = torch.matmul(exact_probabilities, value)
+            diagnostics.record(
+                attention_module=attention_module,
+                selected_scores=attention_scores,
+                exact_scores=exact_scores,
+                selected_probabilities=attention_probabilities,
+                exact_probabilities=exact_probabilities,
+                selected_output=attention_output,
+                exact_output=exact_output,
+                attention_mask=attention_mask,
+            )
         return attention_output.transpose(1, 2), attention_weights
 
     ALL_ATTENTION_FUNCTIONS.register(interface_name, bpla_attention_forward)
     for attention_module in attention_modules:
         attention_module.config._attn_implementation = interface_name
+    module._bpla_attention_mode = mode
+    module._bpla_attention_diagnostics = diagnostics
     return len(attention_modules)
 
 

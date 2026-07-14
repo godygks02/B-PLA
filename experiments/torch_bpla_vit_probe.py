@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
 from modules.torch_bpla import (
+    AttentionDiagnostics,
     SharedBPLATables,
     TorchBPLAActivation,
     TorchBPLAConfig,
@@ -50,6 +51,26 @@ IMAGENETTE_TO_IMAGENET = {
 
 def get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def print_attention_diagnostics(model: nn.Module) -> None:
+    diagnostics = getattr(model, "_bpla_attention_diagnostics", None)
+    if diagnostics is None:
+        return
+    if not diagnostics.recorded:
+        print("attention diagnostics    : no attention call recorded")
+        return
+    layer = "n/a" if diagnostics.layer_index is None else str(diagnostics.layer_index)
+    masked = (
+        "n/a"
+        if diagnostics.masked_probability_max is None
+        else f"{diagnostics.masked_probability_max:.6e}"
+    )
+    print(f"diagnostic attention layer: {layer}")
+    print(f"QK score MAE             : {diagnostics.qk_score_mae:.6e}")
+    print(f"Softmax probability MAE  : {diagnostics.softmax_probability_mae:.6e}")
+    print(f"attention output MAE      : {diagnostics.attention_output_mae:.6e}")
+    print(f"masked probability max   : {masked}")
 
 
 def build_config(args: argparse.Namespace) -> TorchBPLAConfig:
@@ -128,7 +149,19 @@ def convert_model(
         replaced_act_fn = replace_vit_intermediate_activations(model, cfg, tables)
     replaced_attention = 0
     if not args.no_attention:
-        replaced_attention = replace_attention_matmuls(model, cfg, tables)
+        attention_mode = getattr(args, "attention_mode", "bpla-full")
+        diagnostics = (
+            AttentionDiagnostics(attention_mode)
+            if getattr(args, "attention_diagnostics", False)
+            else None
+        )
+        replaced_attention = replace_attention_matmuls(
+            model,
+            cfg,
+            tables,
+            mode=attention_mode,
+            diagnostics=diagnostics,
+        )
     return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model)), replaced_attention
 
 
@@ -206,6 +239,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-linear", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
     parser.add_argument("--no-attention", action="store_true")
+    parser.add_argument(
+        "--attention-mode",
+        choices=["exact", "bpla-qk", "bpla-pv", "bpla-full"],
+        default="bpla-full",
+    )
+    parser.add_argument("--attention-diagnostics", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--list-replaced-modules", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
@@ -229,6 +268,7 @@ def main() -> None:
         print(f"replaced Linear modules  : {replaced_linear}")
         print(f"replaced act callables   : {replaced_act}")
         print(f"replaced attention blocks: {replaced_attention}")
+        print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
         if args.list_replaced_modules:
             linear_names, activation_names = list_replaced_modules(probe)
             print("replaced Linear names    :")
@@ -239,6 +279,7 @@ def main() -> None:
                 print(f"  - {name}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"top-1 agreement          : {stats['top1_agreement']:.2f}%")
+        print_attention_diagnostics(probe)
         return
 
     print(f"Loading ViT model: {args.model_id}")
@@ -260,6 +301,7 @@ def main() -> None:
     print(f"Replaced Linear modules: {replaced_linear}")
     print(f"Replaced activation callables: {replaced_act}")
     print(f"Replaced attention blocks: {replaced_attention}")
+    print(f"Attention mode: {args.attention_mode if not args.no_attention else 'disabled'}")
     if args.list_replaced_modules:
         linear_names, activation_names = list_replaced_modules(probe)
         print("Replaced Linear module names:")
@@ -281,6 +323,7 @@ def main() -> None:
         stats = compare_logits(ann, probe, pixels)
         print("Stop-after-conversion smoke forward passed.")
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
+        print_attention_diagnostics(probe)
         return
 
     ann_logits = None
@@ -295,6 +338,7 @@ def main() -> None:
     print(f"replaced Linear modules  : {replaced_linear}")
     print(f"replaced act callables   : {replaced_act}")
     print(f"replaced attention blocks: {replaced_attention}")
+    print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
     print(f"B-PLA Top-1 / Top-5      : {top1:.2f}% / {top5:.2f}%")
     if ann_logits is not None:
         if ann_logits.shape != bpla_logits.shape:
@@ -307,6 +351,7 @@ def main() -> None:
         rmse = torch.sqrt((diff * diff).mean()).item()
         print(f"ANN-BPLA Top-1 agreement : {agreement:.2f}%")
         print(f"ANN-BPLA logit MAE/RMSE  : {mae:.6e} / {rmse:.6e}")
+    print_attention_diagnostics(probe)
 
 
 if __name__ == "__main__":

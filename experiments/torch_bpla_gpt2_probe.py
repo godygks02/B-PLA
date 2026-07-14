@@ -25,6 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
 from modules.torch_bpla import (
+    AttentionDiagnostics,
     SharedBPLATables,
     TorchBPLAActivation,
     TorchBPLAConfig,
@@ -46,6 +47,26 @@ def normalize_dataset_name(dataset_name: str) -> str:
 
 def get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def print_attention_diagnostics(model: nn.Module) -> None:
+    diagnostics = getattr(model, "_bpla_attention_diagnostics", None)
+    if diagnostics is None:
+        return
+    if not diagnostics.recorded:
+        print("attention diagnostics    : no attention call recorded")
+        return
+    layer = "n/a" if diagnostics.layer_index is None else str(diagnostics.layer_index)
+    masked = (
+        "n/a"
+        if diagnostics.masked_probability_max is None
+        else f"{diagnostics.masked_probability_max:.6e}"
+    )
+    print(f"diagnostic attention layer: {layer}")
+    print(f"QK score MAE             : {diagnostics.qk_score_mae:.6e}")
+    print(f"Softmax probability MAE  : {diagnostics.softmax_probability_mae:.6e}")
+    print(f"attention output MAE      : {diagnostics.attention_output_mae:.6e}")
+    print(f"masked probability max   : {masked}")
 
 
 def build_config(args: argparse.Namespace) -> TorchBPLAConfig:
@@ -91,7 +112,19 @@ def convert_model(
     replaced_activations = sum(1 for child in model.modules() if isinstance(child, TorchBPLAActivation))
     replaced_attention = 0
     if not args.no_attention:
-        replaced_attention = replace_attention_matmuls(model, cfg, tables)
+        attention_mode = getattr(args, "attention_mode", "bpla-full")
+        diagnostics = (
+            AttentionDiagnostics(attention_mode)
+            if getattr(args, "attention_diagnostics", False)
+            else None
+        )
+        replaced_attention = replace_attention_matmuls(
+            model,
+            cfg,
+            tables,
+            mode=attention_mode,
+            diagnostics=diagnostics,
+        )
     return model, replaced, replaced_activations, replaced_attention
 
 
@@ -243,6 +276,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-conv1d", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
     parser.add_argument("--no-attention", action="store_true")
+    parser.add_argument(
+        "--attention-mode",
+        choices=["exact", "bpla-qk", "bpla-pv", "bpla-full"],
+        default="bpla-full",
+    )
+    parser.add_argument("--attention-diagnostics", action="store_true")
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--smoke-text", default="The quick brown fox jumps over the lazy dog.")
@@ -266,8 +305,10 @@ def main() -> None:
         print(f"replaced Conv1D modules  : {replaced}")
         print(f"replaced act callables   : {replaced_activations}")
         print(f"replaced attention blocks: {replaced_attention}")
+        print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
+        print_attention_diagnostics(probe)
         return
 
     print(f"Loading model/tokenizer: {args.model_id}")
@@ -298,6 +339,7 @@ def main() -> None:
     print(f"Replaced Conv1D modules: {replaced}")
     print(f"Replaced activation callables: {replaced_activations}")
     print(f"Replaced attention blocks: {replaced_attention}")
+    print(f"Attention mode: {args.attention_mode if not args.no_attention else 'disabled'}")
 
     if args.stop_after_conversion:
         sample = tokenizer(args.smoke_text, return_tensors="pt").input_ids[:, : min(32, args.max_length)].to(device)
@@ -305,6 +347,7 @@ def main() -> None:
         print("Stop-after-conversion smoke forward passed.")
         print(f"smoke text: {args.smoke_text!r}")
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
+        print_attention_diagnostics(probe)
         return
 
     comparison = None
@@ -328,6 +371,7 @@ def main() -> None:
     print(f"replaced Conv1D modules  : {replaced}")
     print(f"replaced act callables   : {replaced_activations}")
     print(f"replaced attention blocks: {replaced_attention}")
+    print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
     if comparison is not None:
         print(f"ANN PPL                  : {comparison['ann_ppl']:.4f}")
     print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")
@@ -336,6 +380,7 @@ def main() -> None:
         print(f"ANN-BPLA token agreement : {comparison['next_token_agreement']:.2f}%")
         print(f"ANN-BPLA logit MAE/RMSE  : {comparison['logit_mae']:.6e} / {comparison['logit_rmse']:.6e}")
         print(f"evaluated target tokens  : {int(comparison['evaluated_tokens'])}")
+    print_attention_diagnostics(probe)
 
 
 if __name__ == "__main__":
