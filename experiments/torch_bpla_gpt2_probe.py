@@ -33,6 +33,13 @@ from modules.torch_bpla import (
     replace_attention_matmuls,
     replace_gpt2_conv1d_and_gelu,
 )
+from modules.compute_energy import (
+    BPLAComputeConfig,
+    ComputeEnergyTablePJ,
+    estimate_workload_compute_energy,
+    format_compute_energy_report,
+    gpt2_workload_from_model,
+)
 
 
 DATASET_ALIASES = {
@@ -78,6 +85,21 @@ def build_config(args: argparse.Namespace) -> TorchBPLAConfig:
         activation_range=args.activation_range,
         linear_chunk_out=args.linear_chunk_out,
     )
+
+
+def print_compute_energy(model: GPT2LMHeadModel, args: argparse.Namespace, sequence_length: int) -> None:
+    attention_mode = "exact" if args.no_attention else args.attention_mode
+    workload = gpt2_workload_from_model(model, sequence_length, attention_mode=attention_mode)
+    result = estimate_workload_compute_energy(
+        workload,
+        BPLAComputeConfig(args.affine_path, args.dyadic_terms),
+        ComputeEnergyTablePJ(
+            fixed_shift=args.energy_shift_pj,
+            small_control=args.energy_control_pj,
+            fp32_tanh=args.energy_tanh_pj,
+        ),
+    )
+    print("\n" + format_compute_energy_report(result))
 
 
 def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
@@ -286,6 +308,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--smoke-text", default="The quick brown fox jumps over the lazy dog.")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--energy-shift-pj", type=float, default=0.0)
+    parser.add_argument("--energy-control-pj", type=float, default=0.005)
+    parser.add_argument("--energy-tanh-pj", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -309,6 +334,7 @@ def main() -> None:
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
         print_attention_diagnostics(probe)
+        print_compute_energy(probe, args, input_ids.shape[1])
         return
 
     print(f"Loading model/tokenizer: {args.model_id}")
@@ -348,6 +374,7 @@ def main() -> None:
         print(f"smoke text: {args.smoke_text!r}")
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print_attention_diagnostics(probe)
+        print_compute_energy(probe, args, sample.shape[1])
         return
 
     comparison = None
@@ -381,6 +408,7 @@ def main() -> None:
         print(f"ANN-BPLA logit MAE/RMSE  : {comparison['logit_mae']:.6e} / {comparison['logit_rmse']:.6e}")
         print(f"evaluated target tokens  : {int(comparison['evaluated_tokens'])}")
     print_attention_diagnostics(probe)
+    print_compute_energy(probe, args, args.max_length)
 
 
 if __name__ == "__main__":

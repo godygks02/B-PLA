@@ -29,7 +29,14 @@ sys.path.append(str(REFERENCE_ROOT))
 
 from modules.bpla_activation import bpla_activation, build_activation_table, build_dyadic_activation_table
 from modules.bpla_multiplier import bpla_multiply, build_bpla_dyadic_coefficients
-from model_utils import ToyTransformerMLP, calculate_ann_energy, get_device
+from model_utils import ToyTransformerMLP, get_device
+from modules.compute_energy import (
+    BPLAComputeConfig,
+    ComputeEnergyTablePJ,
+    estimate_workload_compute_energy,
+    format_compute_energy_report,
+    mlp_workload,
+)
 
 
 @dataclass(frozen=True)
@@ -243,25 +250,28 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> Eval
     return EvalResult(accuracy=100.0 * correct / total, samples=total)
 
 
-def estimate_energy(input_dim: int, hidden_dim: int, num_classes: int, approx_linear: bool, approx_gelu: bool) -> dict[str, float]:
-    ann = calculate_ann_energy(input_dim, hidden_dim, num_classes)
-    linear_ops = (input_dim * hidden_dim) + (hidden_dim * hidden_dim) + (hidden_dim * num_classes)
-    gelu_ops = 2 * hidden_dim
-
-    bpla_mul_pj = 0.54
-    bpla_add_pj = 0.90
-    bpla_gelu_pj = 0.54
-
-    linear_energy = linear_ops * (bpla_mul_pj + bpla_add_pj) if approx_linear else ann["breakdown_pj"]["linear"]
-    gelu_energy = gelu_ops * bpla_gelu_pj if approx_gelu else ann["breakdown_pj"]["gelu"]
-    total = linear_energy + ann["breakdown_pj"]["ln"] + gelu_energy + ann["breakdown_pj"]["softmax"]
-    return {
-        "ann_total_pj": ann["total_pj"],
-        "bpla_total_pj": total,
-        "linear_pj": linear_energy,
-        "gelu_pj": gelu_energy,
-        "savings_pct": (1.0 - total / ann["total_pj"]) * 100.0,
-    }
+def estimate_energy(
+    input_dim: int,
+    hidden_dim: int,
+    num_classes: int,
+    approx_linear: bool,
+    approx_gelu: bool,
+    affine_path: str,
+    dyadic_terms: int,
+    energy_table: ComputeEnergyTablePJ,
+) -> dict[str, float | str]:
+    workload = mlp_workload(
+        input_dim,
+        hidden_dim,
+        num_classes,
+        replace_linear=approx_linear,
+        replace_gelu=approx_gelu,
+    )
+    return estimate_workload_compute_energy(
+        workload,
+        BPLAComputeConfig(affine_path, dyadic_terms),
+        energy_table,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -277,6 +287,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-shift", type=int, default=16)
     parser.add_argument("--no-bpla-linear", action="store_true")
     parser.add_argument("--no-bpla-gelu", action="store_true")
+    parser.add_argument("--energy-shift-pj", type=float, default=0.0)
+    parser.add_argument("--energy-control-pj", type=float, default=0.005)
+    parser.add_argument("--energy-tanh-pj", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -317,6 +330,13 @@ def main() -> None:
         checkpoint["num_classes"],
         approx_linear,
         approx_gelu,
+        args.affine_path,
+        args.dyadic_terms,
+        ComputeEnergyTablePJ(
+            fixed_shift=args.energy_shift_pj,
+            small_control=args.energy_control_pj,
+            fp32_tanh=args.energy_tanh_pj,
+        ),
     )
 
     print("\nB-PLA MNIST MLP Experiment")
@@ -329,10 +349,8 @@ def main() -> None:
     print(f"B-PLA accuracy           : {bpla_result.accuracy:.2f}%")
     print(f"accuracy drop            : {ann_result.accuracy - bpla_result.accuracy:.2f}%")
     print("-" * 72)
-    print("Energy is an operation-level proxy, not a synthesis result.")
-    print(f"ANN energy               : {energy['ann_total_pj'] / 1e6:.4f} uJ/sample")
-    print(f"B-PLA proxy energy       : {energy['bpla_total_pj'] / 1e6:.4f} uJ/sample")
-    print(f"proxy savings            : {energy['savings_pct']:.2f}%")
+    print("Energy is compute-only theory, not a synthesis result.")
+    print("\n" + format_compute_energy_report(energy))
 
 
 if __name__ == "__main__":

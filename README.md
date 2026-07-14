@@ -20,6 +20,8 @@ PyTorch proxy modules for large-model sensitivity tests.
 - `modules/dyadic.py`: signed power-of-two dyadic coefficient utilities.
 - `modules/pla_snn.py`: term-free event-driven PLA compiler and conditional-accumulation runtime.
 - `modules/torch_bpla.py`: CUDA-friendly PyTorch B-PLA proxy layers.
+- `modules/compute_energy.py`: memory-free theoretical arithmetic energy model.
+- `experiments/compute_energy_experiment.py`: primitive, MLP, ViT, and GPT-2 compute-energy comparison.
 - `experiments/bpla_mlp_experiment.py`: hardware-style MNIST MLP probe.
 - `experiments/torch_bpla_mlp_probe.py`: fast PyTorch MNIST MLP probe.
 - `experiments/torch_bpla_gpt2_probe.py`: GPT-2 B-PLA sensitivity probe.
@@ -49,6 +51,19 @@ Dry-run the large-model wrappers without downloading GPT-2 or ViT:
 python experiments/torch_bpla_gpt2_probe.py --dry-run --affine-path dyadic --dyadic-terms 2
 python experiments/torch_bpla_vit_probe.py --dry-run --affine-path dyadic --dyadic-terms 2
 ```
+
+Run the standalone compute-only comparison without loading datasets or pretrained models:
+
+```bash
+python experiments/compute_energy_experiment.py --affine-path dyadic --dyadic-terms 2 --gpt2-sequence-length 256
+python experiments/compute_energy_experiment.py --affine-path dyadic --dyadic-terms 2 --shift-energy-pj 0.05 --json-out results/compute_energy.json
+```
+
+This model excludes LUT, register, SRAM, DRAM, interconnect, and leakage energy.
+It charges one common FP32 accumulation per scalar product and uses a zero-cost
+`tanh` as a conservative lower bound for the conventional tanh-form GELU. The
+MLP, ViT, and GPT-2 probes also print the same compute-only estimate for their
+actual replacement settings.
 
 ## MNIST MLP Probe
 

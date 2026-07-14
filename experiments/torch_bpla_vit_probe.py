@@ -33,6 +33,13 @@ from modules.torch_bpla import (
     replace_attention_matmuls,
     replace_linear_and_gelu,
 )
+from modules.compute_energy import (
+    BPLAComputeConfig,
+    ComputeEnergyTablePJ,
+    estimate_workload_compute_energy,
+    format_compute_energy_report,
+    vit_workload_from_model,
+)
 
 
 IMAGENETTE_TO_IMAGENET = {
@@ -82,6 +89,21 @@ def build_config(args: argparse.Namespace) -> TorchBPLAConfig:
         activation_range=args.activation_range,
         linear_chunk_out=args.linear_chunk_out,
     )
+
+
+def print_compute_energy(model: ViTForImageClassification, args: argparse.Namespace) -> None:
+    attention_mode = "exact" if args.no_attention else args.attention_mode
+    workload = vit_workload_from_model(model, attention_mode=attention_mode)
+    result = estimate_workload_compute_energy(
+        workload,
+        BPLAComputeConfig(args.affine_path, args.dyadic_terms),
+        ComputeEnergyTablePJ(
+            fixed_shift=args.energy_shift_pj,
+            small_control=args.energy_control_pj,
+            fp32_tanh=args.energy_tanh_pj,
+        ),
+    )
+    print("\n" + format_compute_energy_report(result))
 
 
 def make_dry_run_model(device: torch.device) -> ViTForImageClassification:
@@ -249,6 +271,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-replaced-modules", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--energy-shift-pj", type=float, default=0.0)
+    parser.add_argument("--energy-control-pj", type=float, default=0.005)
+    parser.add_argument("--energy-tanh-pj", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -280,6 +305,7 @@ def main() -> None:
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"top-1 agreement          : {stats['top1_agreement']:.2f}%")
         print_attention_diagnostics(probe)
+        print_compute_energy(probe, args)
         return
 
     print(f"Loading ViT model: {args.model_id}")
@@ -324,6 +350,7 @@ def main() -> None:
         print("Stop-after-conversion smoke forward passed.")
         print(f"logit MAE / RMSE: {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print_attention_diagnostics(probe)
+        print_compute_energy(probe, args)
         return
 
     ann_logits = None
@@ -352,6 +379,7 @@ def main() -> None:
         print(f"ANN-BPLA Top-1 agreement : {agreement:.2f}%")
         print(f"ANN-BPLA logit MAE/RMSE  : {mae:.6e} / {rmse:.6e}")
     print_attention_diagnostics(probe)
+    print_compute_energy(probe, args)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,13 @@ sys.path.append(str(REFERENCE_ROOT))
 
 from model_utils import ToyTransformerMLP, get_device
 from modules.torch_bpla import TorchBPLAConfig, replace_linear_and_gelu
+from modules.compute_energy import (
+    BPLAComputeConfig,
+    ComputeEnergyTablePJ,
+    estimate_workload_compute_energy,
+    format_compute_energy_report,
+    mlp_workload,
+)
 
 
 def load_mnist(batch_size: int, max_test_samples: int | None) -> DataLoader:
@@ -70,6 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-linear", action="store_true")
     parser.add_argument("--no-gelu", action="store_true")
     parser.add_argument("--max-linear-modules", type=int, default=None)
+    parser.add_argument("--energy-shift-pj", type=float, default=0.0)
+    parser.add_argument("--energy-control-pj", type=float, default=0.005)
+    parser.add_argument("--energy-tanh-pj", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -119,6 +129,24 @@ def main() -> None:
     print(f"accuracy drop            : {ann_acc - probe_acc:.2f}%")
     print(f"logit MAE / RMSE         : {mae:.6e} / {rmse:.6e}")
     print(f"prediction agreement     : {agreement:.2f}%")
+    workload = mlp_workload(
+        checkpoint["input_dim"],
+        checkpoint["hidden_dim"],
+        checkpoint["num_classes"],
+        replace_linear=not args.no_linear,
+        replace_gelu=not args.no_gelu,
+        max_linear_modules=args.max_linear_modules,
+    )
+    energy = estimate_workload_compute_energy(
+        workload,
+        BPLAComputeConfig(args.affine_path, args.dyadic_terms),
+        ComputeEnergyTablePJ(
+            fixed_shift=args.energy_shift_pj,
+            small_control=args.energy_control_pj,
+            fp32_tanh=args.energy_tanh_pj,
+        ),
+    )
+    print("\n" + format_compute_energy_report(energy))
 
 
 if __name__ == "__main__":
