@@ -22,6 +22,7 @@ B_PLA_vault/
 *.pt
 *.ckpt
 *.safetensors
+*.pdf
 
 .env
 .DS_Store

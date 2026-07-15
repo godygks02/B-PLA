@@ -32,6 +32,7 @@ from modules.torch_bpla import (
     calibrate_model_activation_range,
     replace_attention_matmuls,
     replace_gpt2_conv1d_and_gelu,
+    replace_layer_norms,
 )
 from modules.compute_energy import (
     BPLAComputeConfig,
@@ -100,6 +101,8 @@ def print_compute_energy(model: GPT2LMHeadModel, args: argparse.Namespace, seque
         ),
     )
     print("\n" + format_compute_energy_report(result))
+    if args.bpla_softmax or args.bpla_layernorm:
+        print("Note: this legacy compute model does not yet charge Softmax or LayerNorm operations.")
 
 
 def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
@@ -146,7 +149,12 @@ def convert_model(
             tables,
             mode=attention_mode,
             diagnostics=diagnostics,
+            approximate_softmax=getattr(args, "bpla_softmax", False),
         )
+    replaced_layernorm = 0
+    if getattr(args, "bpla_layernorm", False):
+        replaced_layernorm = replace_layer_norms(model, cfg, tables)
+    model._bpla_layernorm_count = replaced_layernorm
     return model, replaced, replaced_activations, replaced_attention
 
 
@@ -304,6 +312,16 @@ def parse_args() -> argparse.Namespace:
         default="bpla-full",
     )
     parser.add_argument("--attention-diagnostics", action="store_true")
+    parser.add_argument(
+        "--bpla-softmax",
+        action="store_true",
+        help="Use the composed B-PLA exp2/reciprocal/multiply Softmax in attention.",
+    )
+    parser.add_argument(
+        "--bpla-layernorm",
+        action="store_true",
+        help="Replace all LayerNorm modules with the composed B-PLA proxy.",
+    )
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
     parser.add_argument("--smoke-text", default="The quick brown fox jumps over the lazy dog.")
@@ -331,6 +349,8 @@ def main() -> None:
         print(f"replaced act callables   : {replaced_activations}")
         print(f"replaced attention blocks: {replaced_attention}")
         print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
+        print(f"B-PLA Softmax            : {args.bpla_softmax and not args.no_attention}")
+        print(f"replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
         print(f"logit MAE / RMSE         : {stats['mae']:.6e} / {stats['rmse']:.6e}")
         print(f"next-token agreement     : {stats['next_token_agreement']:.2f}%")
         print_attention_diagnostics(probe)
@@ -366,6 +386,8 @@ def main() -> None:
     print(f"Replaced activation callables: {replaced_activations}")
     print(f"Replaced attention blocks: {replaced_attention}")
     print(f"Attention mode: {args.attention_mode if not args.no_attention else 'disabled'}")
+    print(f"B-PLA Softmax: {args.bpla_softmax and not args.no_attention}")
+    print(f"Replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
 
     if args.stop_after_conversion:
         sample = tokenizer(args.smoke_text, return_tensors="pt").input_ids[:, : min(32, args.max_length)].to(device)
@@ -399,6 +421,8 @@ def main() -> None:
     print(f"replaced act callables   : {replaced_activations}")
     print(f"replaced attention blocks: {replaced_attention}")
     print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
+    print(f"B-PLA Softmax            : {args.bpla_softmax and not args.no_attention}")
+    print(f"replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
     if comparison is not None:
         print(f"ANN PPL                  : {comparison['ann_ppl']:.4f}")
     print(f"B-PLA proxy PPL          : {bpla_ppl:.4f}")

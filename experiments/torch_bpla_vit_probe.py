@@ -31,6 +31,7 @@ from modules.torch_bpla import (
     TorchBPLALinear,
     calibrate_model_activation_range,
     replace_attention_matmuls,
+    replace_layer_norms,
     replace_linear_and_gelu,
 )
 from modules.compute_energy import (
@@ -104,6 +105,8 @@ def print_compute_energy(model: ViTForImageClassification, args: argparse.Namesp
         ),
     )
     print("\n" + format_compute_energy_report(result))
+    if args.bpla_softmax or args.bpla_layernorm:
+        print("Note: this legacy compute model does not yet charge Softmax or LayerNorm operations.")
 
 
 def make_dry_run_model(device: torch.device) -> ViTForImageClassification:
@@ -183,7 +186,12 @@ def convert_model(
             tables,
             mode=attention_mode,
             diagnostics=diagnostics,
+            approximate_softmax=getattr(args, "bpla_softmax", False),
         )
+    replaced_layernorm = 0
+    if getattr(args, "bpla_layernorm", False):
+        replaced_layernorm = replace_layer_norms(model, cfg, tables)
+    model._bpla_layernorm_count = replaced_layernorm
     return model, replaced_linear, max(replaced_act_fn, count_bpla_activations(model)), replaced_attention
 
 
@@ -267,6 +275,16 @@ def parse_args() -> argparse.Namespace:
         default="bpla-full",
     )
     parser.add_argument("--attention-diagnostics", action="store_true")
+    parser.add_argument(
+        "--bpla-softmax",
+        action="store_true",
+        help="Use the composed B-PLA exp2/reciprocal/multiply Softmax in attention.",
+    )
+    parser.add_argument(
+        "--bpla-layernorm",
+        action="store_true",
+        help="Replace all LayerNorm modules with the composed B-PLA proxy.",
+    )
     parser.add_argument("--evaluate-ann", action="store_true")
     parser.add_argument("--list-replaced-modules", action="store_true")
     parser.add_argument("--stop-after-conversion", action="store_true")
@@ -294,6 +312,8 @@ def main() -> None:
         print(f"replaced act callables   : {replaced_act}")
         print(f"replaced attention blocks: {replaced_attention}")
         print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
+        print(f"B-PLA Softmax            : {args.bpla_softmax and not args.no_attention}")
+        print(f"replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
         if args.list_replaced_modules:
             linear_names, activation_names = list_replaced_modules(probe)
             print("replaced Linear names    :")
@@ -328,6 +348,8 @@ def main() -> None:
     print(f"Replaced activation callables: {replaced_act}")
     print(f"Replaced attention blocks: {replaced_attention}")
     print(f"Attention mode: {args.attention_mode if not args.no_attention else 'disabled'}")
+    print(f"B-PLA Softmax: {args.bpla_softmax and not args.no_attention}")
+    print(f"Replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
     if args.list_replaced_modules:
         linear_names, activation_names = list_replaced_modules(probe)
         print("Replaced Linear module names:")
@@ -366,6 +388,8 @@ def main() -> None:
     print(f"replaced act callables   : {replaced_act}")
     print(f"replaced attention blocks: {replaced_attention}")
     print(f"attention mode           : {args.attention_mode if not args.no_attention else 'disabled'}")
+    print(f"B-PLA Softmax            : {args.bpla_softmax and not args.no_attention}")
+    print(f"replaced LayerNorm modules: {getattr(probe, '_bpla_layernorm_count', 0)}")
     print(f"B-PLA Top-1 / Top-5      : {top1:.2f}% / {top5:.2f}%")
     if ann_logits is not None:
         if ann_logits.shape != bpla_logits.shape:

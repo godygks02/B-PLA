@@ -17,11 +17,14 @@ from modules.torch_bpla import (
     SharedBPLATables,
     TorchBPLAActivation,
     TorchBPLAConfig,
+    TorchBPLALayerNorm,
     TorchBPLALinear,
     bpla_matmul_torch,
     bpla_multiply_torch,
+    bpla_softmax_torch,
     calibrate_model_activation_range,
     replace_attention_matmuls,
+    replace_layer_norms,
     replace_linear_and_gelu,
 )
 
@@ -56,6 +59,53 @@ class TorchBPLAProxyTests(unittest.TestCase):
         out = bpla_matmul_torch(a, b, cfg)
         self.assertEqual(out.shape, (2, 3, 4, 6))
         self.assertTrue(torch.isfinite(out).all().item())
+
+    def test_composed_bpla_softmax_is_normalized_and_close(self):
+        torch.manual_seed(0)
+        cfg = TorchBPLAConfig(prefix_bits=4, affine_path="float")
+        x = torch.randn(8, 17)
+        actual = bpla_softmax_torch(x, dim=-1, config=cfg)
+        expected = torch.softmax(x, dim=-1)
+        self.assertTrue(torch.isfinite(actual).all().item())
+        self.assertTrue((actual >= 0).all().item())
+        self.assertLess((actual.sum(dim=-1) - 1.0).abs().max().item(), 1.0e-2)
+        self.assertLess((actual - expected).abs().mean().item(), 1.0e-3)
+
+    def test_composed_bpla_softmax_zeros_large_negative_masks(self):
+        cfg = TorchBPLAConfig(prefix_bits=4, affine_path="float")
+        x = torch.tensor([[1.0, 0.0, -1.0e9]])
+        actual = bpla_softmax_torch(x, dim=-1, config=cfg)
+        self.assertEqual(actual[0, 2].item(), 0.0)
+
+    def test_composed_bpla_softmax_dyadic_path_remains_bounded(self):
+        torch.manual_seed(2)
+        cfg = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+        actual = bpla_softmax_torch(torch.randn(8, 17), dim=-1, config=cfg)
+        self.assertTrue(torch.isfinite(actual).all().item())
+        self.assertTrue((actual >= 0).all().item())
+        # Two signed-power-of-two terms are intentionally coarse; this guards
+        # catastrophic divergence without presenting the setting as accurate.
+        self.assertLess((actual.sum(dim=-1) - 1.0).abs().max().item(), 0.4)
+
+    def test_composed_bpla_layernorm_is_close(self):
+        torch.manual_seed(1)
+        cfg = TorchBPLAConfig(prefix_bits=4, affine_path="float")
+        source = torch.nn.LayerNorm(17)
+        x = torch.randn(8, 17)
+        actual = TorchBPLALayerNorm(source, cfg)(x)
+        expected = source(x)
+        self.assertTrue(torch.isfinite(actual).all().item())
+        self.assertLess((actual - expected).abs().mean().item(), 2.0e-2)
+
+    def test_replace_layer_norms_shares_tables(self):
+        model = torch.nn.Sequential(torch.nn.LayerNorm(4), torch.nn.Sequential(torch.nn.LayerNorm(4)))
+        cfg = TorchBPLAConfig(prefix_bits=3, affine_path="float")
+        tables = SharedBPLATables(cfg)
+        replaced = replace_layer_norms(model, cfg, tables)
+        self.assertEqual(replaced, 2)
+        self.assertIsInstance(model[0], TorchBPLALayerNorm)
+        self.assertIsInstance(model[1][0], TorchBPLALayerNorm)
+        self.assertIs(model[0].tables, model[1][0].tables)
 
     def test_converted_modules_share_multiplier_and_activation_tables(self):
         class Model(torch.nn.Module):

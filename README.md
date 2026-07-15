@@ -141,6 +141,27 @@ probability-value product, and `bpla-full` approximates both. Diagnostics record
 the first attention call's QK-score, Softmax-probability, attention-output, and
 masked-probability errors against exact matmul.
 
+Approximate the remaining attention Softmax and model LayerNorm operations
+with the composed B-PLA modules described in the accompanying design PDFs:
+
+```bash
+python experiments/torch_bpla_gpt2_probe.py --dry-run --no-conv1d --no-gelu --attention-mode exact --bpla-softmax --bpla-layernorm --attention-diagnostics --affine-path float
+python experiments/torch_bpla_vit_probe.py --dry-run --no-linear --no-gelu --attention-mode exact --bpla-softmax --bpla-layernorm --attention-diagnostics --affine-path float
+```
+
+`--bpla-softmax` uses max subtraction followed by a prefix-routed affine
+approximation of the fractional `exp2`, exponent shifts, a mantissa reciprocal,
+and B-PLA multiplication. `--bpla-layernorm` composes B-PLA mean scaling,
+squaring, variance scaling, mantissa reciprocal-square-root, exponent shifts,
+and affine scaling. Both flags are opt-in so older probe configurations remain
+comparable. The reductions, maximum, additions, and control paths are still
+exact in this PyTorch sensitivity proxy.
+
+Start the new operator isolation with `--affine-path float`. The default
+two-term dyadic coefficients are deliberately coarse for reciprocal-based
+normalization, so treat `--dyadic-terms` as an accuracy/cost sweep parameter
+rather than assuming that two terms preserve probability normalization.
+
 ## Notes
 
 The PyTorch B-PLA path is a CUDA-friendly sensitivity proxy. It is intended to
