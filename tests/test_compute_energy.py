@@ -12,9 +12,13 @@ from modules.compute_energy import (
     BPLAComputeConfig,
     ComputeEnergyTablePJ,
     bpla_gelu_energy_pj,
+    bpla_layernorm_energy_pj,
     bpla_multiplier_energy_pj,
+    bpla_softmax_energy_pj,
     estimate_workload_compute_energy,
     fp32_gelu_energy_pj,
+    fp32_layernorm_energy_pj,
+    fp32_softmax_energy_pj,
     mlp_workload,
 )
 
@@ -53,6 +57,46 @@ class ComputeEnergyTests(unittest.TestCase):
         self.assertEqual(workload.gelu_sites, 6)
         result = estimate_workload_compute_energy(workload, self.dyadic, self.table)
         self.assertLess(result["bpla_total_pj"], result["ann_total_pj"])
+
+    def test_softmax_energy_matches_composed_correction_path(self):
+        baseline = fp32_softmax_energy_pj(elements=4, rows=1, table=self.table)
+        bpla = bpla_softmax_energy_pj(4, 1, self.dyadic, self.table)
+        self.assertAlmostEqual(baseline["total_pj"], 39.615)
+        self.assertAlmostEqual(bpla["total_pj"], 30.435)
+        self.assertGreater(bpla["correction_normalize_pj"], 0.0)
+
+    def test_layernorm_energy_counts_mean_variance_and_affine(self):
+        baseline = fp32_layernorm_energy_pj(elements=4, rows=1, table=self.table)
+        bpla = bpla_layernorm_energy_pj(4, 1, self.dyadic, self.table)
+        self.assertEqual(baseline["fp32_mul_sites"], 14.0)
+        self.assertEqual(baseline["fp32_add_sites"], 15.0)
+        self.assertEqual(bpla["bpla_multiply_sites"], 14.0)
+        self.assertAlmostEqual(baseline["total_pj"], 69.0)
+        self.assertAlmostEqual(bpla["total_pj"], 22.9)
+
+    def test_workload_total_includes_normalization_energy(self):
+        from modules.compute_energy import ComputeWorkload
+
+        workload = ComputeWorkload(
+            multiply_sites=0,
+            bpla_multiply_sites=0,
+            gelu_sites=0,
+            bpla_gelu_sites=0,
+            label="normalization-only",
+            softmax_rows=1,
+            softmax_elements=4,
+            bpla_softmax_rows=1,
+            bpla_softmax_elements=4,
+            layernorm_rows=1,
+            layernorm_elements=4,
+            bpla_layernorm_rows=1,
+            bpla_layernorm_elements=4,
+        )
+        result = estimate_workload_compute_energy(workload, self.dyadic, self.table)
+        self.assertAlmostEqual(result["ann_total_pj"], 108.615)
+        self.assertAlmostEqual(result["bpla_total_pj"], 53.335)
+        self.assertAlmostEqual(result["ann_softmax_pj"], 39.615)
+        self.assertAlmostEqual(result["bpla_variant_layernorm_pj"], 22.9)
 
 
 if __name__ == "__main__":

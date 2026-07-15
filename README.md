@@ -55,7 +55,7 @@ python experiments/torch_bpla_vit_probe.py --dry-run --affine-path dyadic --dyad
 Run the standalone compute-only comparison without loading datasets or pretrained models:
 
 ```bash
-python experiments/compute_energy_experiment.py --affine-path dyadic --dyadic-terms 2 --gpt2-sequence-length 256
+python experiments/compute_energy_experiment.py --affine-path dyadic --dyadic-terms 2 --gpt2-sequence-length 256 --bpla-softmax --bpla-layernorm
 python experiments/compute_energy_experiment.py --affine-path dyadic --dyadic-terms 2 --shift-energy-pj 0.05 --json-out results/compute_energy.json
 ```
 
@@ -64,6 +64,15 @@ It charges one common FP32 accumulation per scalar product and uses a zero-cost
 `tanh` as a conservative lower bound for the conventional tanh-form GELU. The
 MLP, ViT, and GPT-2 probes also print the same compute-only estimate for their
 actual replacement settings.
+
+The model also reports Softmax and LayerNorm row/element counts, their separate
+ANN/B-PLA energy, and their contribution to the total. Conventional `exp`,
+reciprocal, and reciprocal-square-root default to an optimistic one-FP32-
+multiply energy (`3.7 pJ`) because the cited arithmetic table does not specify
+those units. Override the assumptions with `--energy-exp-pj`,
+`--energy-reciprocal-pj`, and `--energy-rsqrt-pj` in the ViT/GPT-2 probes, or
+the corresponding `--exp-energy-pj`, `--reciprocal-energy-pj`, and
+`--rsqrt-energy-pj` options in the standalone experiment.
 
 ## MNIST MLP Probe
 

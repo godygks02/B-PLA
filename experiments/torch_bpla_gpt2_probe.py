@@ -98,11 +98,12 @@ def print_compute_energy(model: GPT2LMHeadModel, args: argparse.Namespace, seque
             fixed_shift=args.energy_shift_pj,
             small_control=args.energy_control_pj,
             fp32_tanh=args.energy_tanh_pj,
+            fp32_exp=args.energy_exp_pj,
+            fp32_reciprocal=args.energy_reciprocal_pj,
+            fp32_rsqrt=args.energy_rsqrt_pj,
         ),
     )
     print("\n" + format_compute_energy_report(result))
-    if args.bpla_softmax or args.bpla_layernorm:
-        print("Note: this legacy compute model does not yet charge Softmax or LayerNorm operations.")
 
 
 def make_dry_run_model(device: torch.device) -> GPT2LMHeadModel:
@@ -329,6 +330,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--energy-shift-pj", type=float, default=0.0)
     parser.add_argument("--energy-control-pj", type=float, default=0.005)
     parser.add_argument("--energy-tanh-pj", type=float, default=0.0)
+    parser.add_argument("--energy-exp-pj", type=float, default=3.7)
+    parser.add_argument("--energy-reciprocal-pj", type=float, default=3.7)
+    parser.add_argument("--energy-rsqrt-pj", type=float, default=3.7)
     return parser.parse_args()
 
 
