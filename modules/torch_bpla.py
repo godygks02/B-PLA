@@ -9,6 +9,7 @@ class of B-PLA approximation?"
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Literal
 
@@ -276,7 +277,7 @@ def bpla_linear_torch(
 #: Upper bound on the elements materialized by one chunk of the elementwise
 #: broadcast inside a matmul. Emulating a scalar operation over a matmul is
 #: memory-bound, so this matters more than the nominal chunk width.
-_MATMUL_ELEMENT_BUDGET = 8_000_000
+_MATMUL_ELEMENT_BUDGET = int(os.environ.get("BPLA_MATMUL_ELEMENT_BUDGET", 8_000_000))
 
 
 def _elementwise_chunk(a: torch.Tensor, b: torch.Tensor, requested: int) -> int:

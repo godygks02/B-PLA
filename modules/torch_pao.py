@@ -36,6 +36,7 @@ lower bound on B-PLA multiplier fidelity and an upper bound on its simplicity;
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -73,7 +74,7 @@ class TorchPAOConfig:
     # Upper bound on the elements materialized by one chunk of the elementwise
     # broadcast. Emulating a scalar operation over a matmul is memory-bound, so
     # this matters more than the nominal chunk width.
-    element_budget: int = 8_000_000
+    element_budget: int = int(os.environ.get("BPLA_MATMUL_ELEMENT_BUDGET", 8_000_000))
 
 
 def _decompose(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

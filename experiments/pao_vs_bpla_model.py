@@ -211,7 +211,7 @@ def build_vit(args: argparse.Namespace):
 
     model = ViTForImageClassification.from_pretrained(args.vit_model_id)
     model.eval()
-    return model
+    return model.to(args.device)
 
 
 def prepare_vit_batches(args: argparse.Namespace) -> list[dict[str, torch.Tensor]]:
@@ -255,8 +255,8 @@ def run_vit(model: nn.Module, batches: list[dict[str, torch.Tensor]]) -> dict[st
     logits = []
     labels = []
     for batch in batches:
-        logits.append(model(batch["pixel_values"]).logits.float())
-        labels.append(batch["labels"])
+        logits.append(model(batch["pixel_values"]).logits.float().cpu())
+        labels.append(batch["labels"].cpu())
     logits_all = torch.cat(logits)
     labels_all = torch.cat(labels)
     top5 = logits_all.topk(5, dim=-1).indices
@@ -277,7 +277,7 @@ def build_gpt2(args: argparse.Namespace):
 
     model = GPT2LMHeadModel.from_pretrained(args.gpt2_model_id)
     model.eval()
-    return model
+    return model.to(args.device)
 
 
 def prepare_gpt2_batches(args: argparse.Namespace) -> list[dict[str, torch.Tensor]]:
@@ -309,7 +309,7 @@ def run_gpt2(model: nn.Module, batches: list[dict[str, torch.Tensor]]) -> dict[s
     for batch in batches:
         input_ids = batch["input_ids"]
         output = model(input_ids).logits.float()
-        logits.append(output)
+        logits.append(output.cpu())
         shift_logits = output[:, :-1, :]
         shift_labels = input_ids[:, 1:]
         loss = nn.functional.cross_entropy(
@@ -408,6 +408,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--device",
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Device for both the model and the evaluation batches.",
+    )
+    parser.add_argument(
         "--save-logits",
         action="store_true",
         help="Cache raw logits per condition so metrics can be recomputed without rerunning.",
@@ -445,6 +450,10 @@ def main() -> None:
         else:
             batches = prepare_vit_batches(args)
             builder, runner = build_vit, run_vit
+        batches = [
+            {key: value.to(args.device) for key, value in batch.items()}
+            for batch in batches
+        ]
 
         # Forward calibration sees only these inputs, never the labels.
         calibration_batches = batches[: max(1, args.calibration_batches)]
@@ -468,7 +477,7 @@ def main() -> None:
                 started = time.perf_counter()
                 outcome = runner(model, batches)
                 elapsed = time.perf_counter() - started
-                logits = outcome.pop("logits")
+                logits = outcome.pop("logits").cpu()
                 if backend == "exact":
                     reference_logits = logits
                 if args.save_logits:
