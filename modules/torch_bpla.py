@@ -205,6 +205,22 @@ def _fraction_and_exponent(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor,
     return fraction, unbiased_exponent, sign
 
 
+#: Emulating a scalar operation over a whole matmul is memory-bound: the
+#: elementwise chain below writes roughly fifteen temporaries per product.
+#: Fusing it removes almost all of that traffic. Opt-in, because compilation
+#: costs a warm-up per shape and is only worth it for long runs.
+_COMPILE = os.environ.get("BPLA_COMPILE", "0") not in {"0", "", "false", "False"}
+_COMPILED: dict[str, Any] = {}
+
+
+def _compiled(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
+    if not _COMPILE:
+        return fn
+    if name not in _COMPILED:
+        _COMPILED[name] = torch.compile(fn, dynamic=True)
+    return _COMPILED[name]
+
+
 def bpla_multiply_torch(
     a: torch.Tensor,
     b: torch.Tensor,
@@ -214,6 +230,16 @@ def bpla_multiply_torch(
     """Approximate elementwise multiplication with torch-native B-PLA logic."""
 
     _validate_config(config)
+    shared = tables or SharedBPLATables(config)
+    return _compiled("multiply", _bpla_multiply_impl)(a, b, config, shared)
+
+
+def _bpla_multiply_impl(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    config: TorchBPLAConfig,
+    shared: SharedBPLATables,
+) -> torch.Tensor:
     dtype = torch.promote_types(a.dtype, b.dtype)
     a = a.to(dtype)
     b = b.to(dtype)
@@ -224,7 +250,6 @@ def bpla_multiply_torch(
     idx_a = torch.clamp((frac_a * segments).floor().to(torch.long), 0, segments - 1)
     idx_b = torch.clamp((frac_b * segments).floor().to(torch.long), 0, segments - 1)
 
-    shared = tables or SharedBPLATables(config)
     lut = shared.multiplier(a.device, dtype)
 
     if config.multiplier_form == "separable":

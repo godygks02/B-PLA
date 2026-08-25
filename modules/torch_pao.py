@@ -91,6 +91,20 @@ def _compose(fraction: torch.Tensor, exponent: torch.Tensor, negative: torch.Ten
     return torch.where(negative, -magnitude, magnitude)
 
 
+#: See the matching note in torch_bpla: the elementwise chain is
+#: memory-bound and fusing it removes most of the traffic.
+_COMPILE = os.environ.get("BPLA_COMPILE", "0") not in {"0", "", "false", "False"}
+_COMPILED: dict[str, Any] = {}
+
+
+def _compiled(name: str, fn: Any) -> Any:
+    if not _COMPILE:
+        return fn
+    if name not in _COMPILED:
+        _COMPILED[name] = torch.compile(fn, dynamic=True)
+    return _COMPILED[name]
+
+
 def pao_multiply_torch(
     a: torch.Tensor,
     b: torch.Tensor,
@@ -99,6 +113,15 @@ def pao_multiply_torch(
     """Piecewise affine multiplication (PAM), Eq. (5)-(8)."""
 
     config = config or TorchPAOConfig()
+    # The alpha branch recurses, so it stays outside the compiled region.
+    result = _compiled("multiply", _pao_multiply_impl)(a, b)
+    if config.alpha is not None:
+        alpha = torch.full_like(result, config.alpha)
+        result = _compiled("multiply", _pao_multiply_impl)(result, alpha)
+    return result
+
+
+def _pao_multiply_impl(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     dtype = torch.promote_types(a.dtype, b.dtype)
     a = a.to(dtype)
     b = b.to(dtype)
@@ -120,9 +143,6 @@ def pao_multiply_torch(
     if special.any():
         result = torch.where(special, a * b, result)
 
-    if config.alpha is not None:
-        alpha = torch.full_like(result, config.alpha)
-        result = pao_multiply_torch(result, alpha, TorchPAOConfig(config.matmul_chunk_out, None))
     return result
 
 
