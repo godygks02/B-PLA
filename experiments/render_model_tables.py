@@ -32,16 +32,25 @@ BACKEND_PLAIN = {
 }
 
 
+_SCOPE_NOTE = {
+    "multiplication": "multiplications only (nonlinear paths exact)",
+    "nonlinear": "GELU, Softmax and LayerNorm only (matmuls exact)",
+    "combined": "multiplications and nonlinear paths",
+}
+
+
 def _scope_note(record: dict) -> str:
     config = record["configuration"]
-    parts = []
+    parts = [_SCOPE_NOTE.get(config["scopes"][0], config["scopes"][0])]
     if config.get("replace_lm_head"):
         parts.append("output projection converted")
     if config.get("replace_conv2d"):
         parts.append("patch embedding converted")
+    if config.get("replace_layernorm"):
+        parts.append("LayerNorm converted")
     if config.get("pao_alpha"):
         parts.append(f"PAM alpha={config['pao_alpha']}")
-    return "; ".join(parts) if parts else "transformer blocks only"
+    return "; ".join(parts)
 
 
 def _rows(record: dict) -> list[dict]:

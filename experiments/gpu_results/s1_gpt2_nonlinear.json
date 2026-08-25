@@ -1,0 +1,141 @@
+{
+  "configuration": {
+    "models": [
+      "gpt2"
+    ],
+    "backends": [
+      "exact",
+      "pao",
+      "bpla-float",
+      "bpla-dyadic"
+    ],
+    "scopes": [
+      "nonlinear"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 64,
+    "batch_size": 4,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 25600,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "max_shift": 16,
+    "activation_range": 4.0,
+    "linear_chunk_out": 512,
+    "calibration_batches": 2,
+    "calibrate_activation": true,
+    "replace_layernorm": true,
+    "replace_lm_head": false,
+    "replace_conv2d": false,
+    "pao_alpha": null,
+    "seed": 0,
+    "device": "cuda",
+    "save_logits": false,
+    "max_logit_cache_gb": 2.0,
+    "output": "results/s1_gpt2_nonlinear.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "gpt2",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 5.511310338973999,
+      "perplexity": 46.472186744805256,
+      "tokens": 25500,
+      "samples": 100
+    },
+    {
+      "model": "gpt2",
+      "scope": "nonlinear",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 12,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 17.97648397833109,
+      "perplexity": 54.36856864490167,
+      "tokens": 25500,
+      "samples": 100,
+      "logit_mae": 0.5259352068955285,
+      "logit_rmse": 0.6799026049461699,
+      "logit_nrmse": 0.21353315367181444,
+      "argmax_agreement": 73.55078125,
+      "output_gain": 0.9915994742314488,
+      "uncentered_logit_mae": 10.35320876295919,
+      "uncentered_output_gain": 0.9569116460655015
+    },
+    {
+      "model": "gpt2",
+      "scope": "nonlinear",
+      "backend": "bpla-float",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 12,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.01917212549597025,
+        "calibration_samples": 512,
+        "calibration_range": 62.850460052490234
+      },
+      "emulated_forward_seconds": 15.494858364574611,
+      "perplexity": 46.557436710071606,
+      "tokens": 25500,
+      "samples": 100,
+      "logit_mae": 0.05005773619776962,
+      "logit_rmse": 0.06612698742476225,
+      "logit_nrmse": 0.020768127765511134,
+      "argmax_agreement": 97.25390625,
+      "output_gain": 0.9992263498999957,
+      "uncentered_logit_mae": 0.887165263948059,
+      "uncentered_output_gain": 0.9987571771294634
+    },
+    {
+      "model": "gpt2",
+      "scope": "nonlinear",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 12,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.019200725480914116,
+        "calibration_samples": 512,
+        "calibration_range": 62.850460052490234
+      },
+      "emulated_forward_seconds": 15.374105879105628,
+      "perplexity": 47.690973805731296,
+      "tokens": 25500,
+      "samples": 100,
+      "logit_mae": 0.16211528150575194,
+      "logit_rmse": 0.21790481166333892,
+      "logit_nrmse": 0.068436127904554,
+      "argmax_agreement": 91.390625,
+      "output_gain": 0.9914245662481704,
+      "uncentered_logit_mae": 4.045524059434943,
+      "uncentered_output_gain": 0.9968160398352016
+    }
+  ]
+}

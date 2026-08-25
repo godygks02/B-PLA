@@ -1,0 +1,112 @@
+[17:51:47] === scope pass: gpt2=25600 vit_scope=256 fusion=off ===
+[17:51:47] START s1_gpt2_nonlinear
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8047.04it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7471.53it/s]
+    perplexity=nan, logit_nrmse=nan, argmax_agreement=0.0039, output_gain=nan
+[gpt2] scope=nonlinear backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4750.42it/s]
+    perplexity=46.5574, logit_nrmse=0.0208, argmax_agreement=97.2539, output_gain=0.9992
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7346.76it/s]
+    perplexity=47.6910, logit_nrmse=0.0684, argmax_agreement=91.3906, output_gain=0.9914
+
+wrote results/s1_gpt2_nonlinear.json
+[17:54:51] DONE  s1_gpt2_nonlinear (3 min)
+[17:54:51] START s2_vit_nonlinear
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 5413.44it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=nonlinear backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7825.34it/s]
+    top1=87.8906, top5=99.6094, logit_nrmse=0.2793, argmax_agreement=92.9688, output_gain=0.9389
+[vit] scope=nonlinear backend=bpla-float ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7555.40it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0075, argmax_agreement=100.0000, output_gain=1.0000
+[vit] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7689.69it/s]
+    top1=85.9375, top5=99.2188, logit_nrmse=0.0998, argmax_agreement=95.3125, output_gain=1.0038
+
+wrote results/s2_vit_nonlinear.json
+[17:55:31] DONE  s2_vit_nonlinear (0 min)
+[17:55:31] START s3_gpt2_combined
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8152.73it/s]
+    perplexity=46.4722
+[gpt2] scope=combined backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7141.13it/s]
+    perplexity=nan, logit_nrmse=nan, argmax_agreement=0.0039, output_gain=nan
+[gpt2] scope=combined backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5687.97it/s]
+    perplexity=46.6191, logit_nrmse=0.0209, argmax_agreement=97.3320, output_gain=0.9993
+[gpt2] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7202.78it/s]
+    perplexity=47.6931, logit_nrmse=0.0689, argmax_agreement=91.3398, output_gain=0.9912
+
+wrote results/s3_gpt2_combined.json
+[18:39:12] DONE  s3_gpt2_combined (43 min)
+[18:39:12] START s4_vit_combined
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6831.34it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=combined backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7928.44it/s]
+    top1=87.1094, top5=99.2188, logit_nrmse=0.3630, argmax_agreement=89.4531, output_gain=0.9051
+[vit] scope=combined backend=bpla-float ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8251.63it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0074, argmax_agreement=98.8281, output_gain=1.0000
+[vit] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6076.72it/s]
+    top1=85.5469, top5=99.2188, logit_nrmse=0.1026, argmax_agreement=95.7031, output_gain=1.0046
+
+wrote results/s4_vit_combined.json
+[20:30:38] DONE  s4_vit_combined (111 min)
+[20:30:38] === scope pass finished ===
+[20:38:11] === scope pass: gpt2=25600 vit_scope=256 fusion=off ===
+[20:38:11] START s1_gpt2_nonlinear
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8219.33it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7977.75it/s]
+    perplexity=54.3686, logit_nrmse=0.2135, argmax_agreement=73.5508, output_gain=0.9916
+[gpt2] scope=nonlinear backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5482.51it/s]
+    perplexity=46.5574, logit_nrmse=0.0208, argmax_agreement=97.2539, output_gain=0.9992
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6807.44it/s]
+    perplexity=47.6910, logit_nrmse=0.0684, argmax_agreement=91.3906, output_gain=0.9914
+
+wrote results/s1_gpt2_nonlinear.json
+[20:41:16] DONE  s1_gpt2_nonlinear (3 min)
+[20:41:16] SKIP s2_vit_nonlinear
+[20:41:16] START s3_gpt2_combined
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7583.90it/s]
+    perplexity=46.4722
+[gpt2] scope=combined backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8073.00it/s]
+    perplexity=62.8029, logit_nrmse=0.2730, argmax_agreement=66.2383, output_gain=0.9632
+[gpt2] scope=combined backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6580.21it/s]
+    perplexity=46.6191, logit_nrmse=0.0209, argmax_agreement=97.3320, output_gain=0.9993
+[gpt2] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7926.61it/s]
+    perplexity=47.6931, logit_nrmse=0.0689, argmax_agreement=91.3398, output_gain=0.9912
+
+wrote results/s3_gpt2_combined.json
+[21:23:26] DONE  s3_gpt2_combined (42 min)
+[21:23:26] SKIP s4_vit_combined
+[21:23:26] === scope pass finished ===

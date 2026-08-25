@@ -1,0 +1,138 @@
+{
+  "configuration": {
+    "models": [
+      "vit"
+    ],
+    "backends": [
+      "exact",
+      "pao",
+      "bpla-float",
+      "bpla-dyadic"
+    ],
+    "scopes": [
+      "multiplication"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 4000,
+    "batch_size": 32,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 2048,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "max_shift": 16,
+    "activation_range": 4.0,
+    "linear_chunk_out": 512,
+    "calibration_batches": 2,
+    "calibrate_activation": true,
+    "replace_layernorm": false,
+    "replace_lm_head": false,
+    "replace_conv2d": false,
+    "pao_alpha": null,
+    "seed": 0,
+    "device": "cuda",
+    "save_logits": true,
+    "output": "results/f1_vit_full_multiplication.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "vit",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 13.943362501449883,
+      "top1": 84.9,
+      "top5": 97.85,
+      "samples": 4000
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 73,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 4613.990640973672,
+      "top1": 0.25,
+      "top5": 10.175,
+      "samples": 4000,
+      "logit_mae": NaN,
+      "logit_rmse": NaN,
+      "logit_nrmse": NaN,
+      "argmax_agreement": 9.824999809265137,
+      "output_gain": NaN,
+      "uncentered_logit_mae": NaN,
+      "uncentered_output_gain": NaN
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "bpla-float",
+      "coverage": {
+        "linear_modules": 73,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 5499.820605138317,
+      "top1": 18.5,
+      "top5": 24.325,
+      "samples": 4000,
+      "logit_mae": 0.920481354892941,
+      "logit_rmse": 1.2870367433060197,
+      "logit_nrmse": 1.0915245101551039,
+      "argmax_agreement": 19.17500114440918,
+      "output_gain": 0.10639115389558909,
+      "uncentered_logit_mae": 0.9204552089569693,
+      "uncentered_output_gain": 0.10639110695118155
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 73,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 5495.6883619353175,
+      "top1": 18.275,
+      "top5": 24.125,
+      "samples": 4000,
+      "logit_mae": 0.9210960820547547,
+      "logit_rmse": 1.2879693916304522,
+      "logit_nrmse": 1.0923154809729674,
+      "argmax_agreement": 18.92500114440918,
+      "output_gain": 0.10496106793742829,
+      "uncentered_logit_mae": 0.9210697252182006,
+      "uncentered_output_gain": 0.10496102093592122
+    }
+  ]
+}
