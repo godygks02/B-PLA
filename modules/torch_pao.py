@@ -194,11 +194,26 @@ def pao_divide_torch(
 
 
 def paexp2_torch(x: torch.Tensor) -> torch.Tensor:
-    """``paexp2(A) = 2^floor(A) * (1 + A - floor(A))``, Eq. (9)."""
+    """``paexp2(A) = 2^floor(A) * (1 + A - floor(A))``, Eq. (9).
+
+    Special values need explicit handling, as the paper states for its own
+    implementation. Without it ``x - floor(x)`` is ``inf - inf`` at an infinite
+    input and the whole expression returns NaN -- which poisons any masked
+    softmax, since an additive causal mask supplies exactly that input.
+    """
 
     floor = torch.floor(x)
     fraction = x - floor
-    return torch.ldexp(1.0 + fraction, floor.to(torch.int32).clamp(-149, 128))
+    exponent = torch.nan_to_num(floor, nan=0.0, posinf=128.0, neginf=-149.0)
+    result = torch.ldexp(1.0 + fraction, exponent.to(torch.int32).clamp(-149, 128))
+
+    # Underflow and overflow the way the exact function does, rather than
+    # saturating at the smallest subnormal.
+    result = torch.where(floor < -149, torch.zeros_like(result), result)
+    result = torch.where(floor > 128, torch.full_like(result, float("inf")), result)
+    result = torch.where(torch.isneginf(x), torch.zeros_like(result), result)
+    result = torch.where(torch.isposinf(x), torch.full_like(result, float("inf")), result)
+    return torch.where(torch.isnan(x), torch.full_like(result, float("nan")), result)
 
 
 def palog2_torch(x: torch.Tensor) -> torch.Tensor:

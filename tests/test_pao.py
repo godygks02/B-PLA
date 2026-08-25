@@ -152,6 +152,25 @@ class PAODerivedOperationTests(unittest.TestCase):
         y = torch.tensor([-3.0, -1.0, 0.0, 1.0, 5.0])
         torch.testing.assert_close(torch_pao.paexp2_torch(y), torch.exp2(y))
 
+    def test_paexp2_handles_special_values_like_the_exact_function(self):
+        """An additive causal mask supplies -inf, where ``x - floor(x)`` is NaN."""
+
+        y = torch.tensor([float("-inf"), -1e9, 0.0, 1e9, float("inf")])
+        torch.testing.assert_close(torch_pao.paexp2_torch(y), torch.exp2(y))
+        self.assertTrue(bool(torch_pao.paexp2_torch(torch.tensor([float("nan")])).isnan()))
+
+    def test_softmax_survives_an_additive_causal_mask(self):
+        """The regression this fix was made for: GPT-2 returned NaN perplexity."""
+
+        torch.manual_seed(9)
+        scores = torch.randn(2, 6, 6)
+        mask = torch.triu(torch.full((6, 6), float("-inf")), diagonal=1)
+        probabilities = torch_pao.pao_softmax_torch(scores + mask, dim=-1)
+        self.assertFalse(bool(probabilities.isnan().any()))
+        # Masked positions must contribute nothing.
+        upper = mask.expand_as(probabilities) == float("-inf")
+        self.assertEqual(float(probabilities[upper].abs().max()), 0.0)
+
     def test_pasqrt_is_exact_at_even_powers_of_two(self):
         x = torch.tensor([0.25, 1.0, 4.0, 16.0, 64.0])
         torch.testing.assert_close(torch_pao.pasqrt_torch(x), torch.sqrt(x), rtol=1e-6, atol=0.0)
