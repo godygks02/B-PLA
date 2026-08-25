@@ -1,0 +1,112 @@
+{
+  "configuration": {
+    "models": [
+      "gpt2"
+    ],
+    "backends": [
+      "exact",
+      "pao",
+      "bpla-dyadic"
+    ],
+    "scopes": [
+      "multiplication"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 64,
+    "batch_size": 4,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 512,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "max_shift": 16,
+    "activation_range": 4.0,
+    "linear_chunk_out": 128,
+    "calibration_batches": 1,
+    "calibrate_activation": true,
+    "replace_layernorm": false,
+    "replace_lm_head": true,
+    "replace_conv2d": false,
+    "pao_alpha": null,
+    "seed": 0,
+    "save_logits": true,
+    "output": "experiments\\pao_vs_bpla_model_gpt2_lmhead.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "gpt2",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 0.7668711000587791,
+      "perplexity": 43.32200053410932,
+      "tokens": 510,
+      "samples": 2
+    },
+    {
+      "model": "gpt2",
+      "scope": "multiplication",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 49,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 288.58911429997534,
+      "perplexity": 43.08914878799323,
+      "tokens": 510,
+      "samples": 2,
+      "logit_mae": 0.23362059548197736,
+      "logit_rmse": 0.3107310954643388,
+      "logit_nrmse": 0.09787346015997551,
+      "argmax_agreement": 88.4765625,
+      "output_gain": 0.9783691422481307,
+      "uncentered_logit_mae": 6.253058857446817,
+      "uncentered_output_gain": 0.9493408254823574
+    },
+    {
+      "model": "gpt2",
+      "scope": "multiplication",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 49,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 311.7130531000439,
+      "perplexity": 43.32851292811779,
+      "tokens": 510,
+      "samples": 2,
+      "logit_mae": 0.004090687982721654,
+      "logit_rmse": 0.00620462448933991,
+      "logit_nrmse": 0.0019543202358217526,
+      "argmax_agreement": 99.8046875,
+      "output_gain": 1.0000041265713266,
+      "uncentered_logit_mae": 0.034836364230956214,
+      "uncentered_output_gain": 0.9999946706243357
+    }
+  ]
+}

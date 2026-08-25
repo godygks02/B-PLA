@@ -1,0 +1,51 @@
+{
+  "configuration": {
+    "models": [
+      "vit",
+      "gpt2"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "gpt2_model_id": "gpt2",
+    "vit_tokens": 197,
+    "gpt2_tokens": 256,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "scopes": [
+      "multiplication"
+    ],
+    "replace_layernorm": false,
+    "replace_lm_head": true,
+    "replace_conv2d": true,
+    "output": "C:\\Users\\cm120\\Project\\VLM_SNN_Research\\B_PLA\\experiments\\replacement_coverage.json"
+  },
+  "audits": [
+    {
+      "tokens_per_sequence": 197,
+      "converted_sites": 74,
+      "exact_sites": 0,
+      "converted_multiplies": 16999028736,
+      "exact_multiplies": 0,
+      "converted_fraction": 1.0,
+      "exact_remaining_paths": [],
+      "bpla_activation_sites": 0,
+      "bpla_layernorm_sites": 0,
+      "attention_blocks_converted": 1,
+      "model": "vit",
+      "scope": "multiplication"
+    },
+    {
+      "tokens_per_sequence": 256,
+      "converted_sites": 49,
+      "exact_sites": 0,
+      "converted_multiplies": 31624200192,
+      "exact_multiplies": 0,
+      "converted_fraction": 1.0,
+      "exact_remaining_paths": [],
+      "bpla_activation_sites": 0,
+      "bpla_layernorm_sites": 0,
+      "attention_blocks_converted": 1,
+      "model": "gpt2",
+      "scope": "multiplication"
+    }
+  ]
+}

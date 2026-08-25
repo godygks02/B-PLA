@@ -1,0 +1,388 @@
+{
+  "activation_source": "google/vit-base-patch16-224 on 8 images",
+  "calibrated_range": 36.493309020996094,
+  "prefix_bits": 4,
+  "dyadic_terms": 2,
+  "max_shift": 16,
+  "sample_count": 480156,
+  "notes": [
+    "GELU is evaluated on the pretrained model's own activation distribution, not on a uniform grid, because that is where the error matters.",
+    "The PAO GELU is our composition from PA primitives; the original paper uses ReLU and defines no piecewise-affine GELU."
+  ],
+  "primitives": [
+    {
+      "primitive": "gelu",
+      "method": "pao",
+      "dyadic_terms": null,
+      "domain": "empirical activations",
+      "mae": 0.019884366542100906,
+      "rmse": 0.02548425830900669,
+      "nrmse": 0.08823467046022415,
+      "p99_abs_error": 0.05114394426345825,
+      "max_abs_error": 0.05307089164853096
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-float",
+      "dyadic_terms": null,
+      "domain": "empirical activations",
+      "mae": 9.912875975714996e-05,
+      "rmse": 0.0013837454607710242,
+      "nrmse": 0.004790970124304295,
+      "p99_abs_error": 0.0004895782331004739,
+      "max_abs_error": 0.0327945239841938
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 1,
+      "domain": "empirical activations",
+      "mae": 0.025255028158426285,
+      "rmse": 0.03545999899506569,
+      "nrmse": 0.12277388572692871,
+      "p99_abs_error": 0.09347423911094666,
+      "max_abs_error": 0.21443963050842285
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 2,
+      "domain": "empirical activations",
+      "mae": 0.004814945161342621,
+      "rmse": 0.0073053063824772835,
+      "nrmse": 0.025293312966823578,
+      "p99_abs_error": 0.01992919109761715,
+      "max_abs_error": 0.07664120197296143
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 3,
+      "domain": "empirical activations",
+      "mae": 0.0008499136311002076,
+      "rmse": 0.0019788879435509443,
+      "nrmse": 0.006851544138044119,
+      "p99_abs_error": 0.004457275383174419,
+      "max_abs_error": 0.0327945239841938
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 4,
+      "domain": "empirical activations",
+      "mae": 0.00019761454313993454,
+      "rmse": 0.0014028337318450212,
+      "nrmse": 0.00485706003382802,
+      "p99_abs_error": 0.000961915822699666,
+      "max_abs_error": 0.0327945239841938
+    },
+    {
+      "primitive": "gelu",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 6,
+      "domain": "empirical activations",
+      "mae": 0.00010320165893062949,
+      "rmse": 0.0013838253216817975,
+      "nrmse": 0.004791246727108955,
+      "p99_abs_error": 0.0004893558798357844,
+      "max_abs_error": 0.0327945239841938
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "pao",
+      "dyadic_terms": null,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.04182138293981552,
+      "rmse": 0.04635205492377281,
+      "nrmse": 0.03152093291282654,
+      "p99_abs_error": 0.07849688082933426,
+      "max_abs_error": 0.08549928665161133
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-float",
+      "dyadic_terms": null,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.00011246080248383805,
+      "rmse": 0.00015402276767417789,
+      "nrmse": 0.00010474058944964781,
+      "p99_abs_error": 0.00039589405059814453,
+      "max_abs_error": 0.0004590749740600586
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 1,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.11411993950605392,
+      "rmse": 0.17980608344078064,
+      "nrmse": 0.12227409332990646,
+      "p99_abs_error": 0.49611619114875793,
+      "max_abs_error": 0.499996542930603
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 2,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.018939852714538574,
+      "rmse": 0.03433855623006821,
+      "nrmse": 0.023351356387138367,
+      "p99_abs_error": 0.12379265576601028,
+      "max_abs_error": 0.12499916553497314
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 3,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.003858563955873251,
+      "rmse": 0.006100584287196398,
+      "nrmse": 0.0041485996916890144,
+      "p99_abs_error": 0.015679240226745605,
+      "max_abs_error": 0.015691637992858887
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 4,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.000844651716761291,
+      "rmse": 0.0012959555024281144,
+      "nrmse": 0.0008812926826067269,
+      "p99_abs_error": 0.003867747262120247,
+      "max_abs_error": 0.004073619842529297
+    },
+    {
+      "primitive": "exp2_fraction",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 6,
+      "domain": "mantissa fraction [0,1)",
+      "mae": 0.00013398432929534465,
+      "rmse": 0.00017953904171008617,
+      "nrmse": 0.00012209250417072326,
+      "p99_abs_error": 0.0005182046443223953,
+      "max_abs_error": 0.0006335973739624023
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "pao",
+      "dyadic_terms": null,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.05692244693636894,
+      "rmse": 0.0624520443379879,
+      "nrmse": 0.08831871300935745,
+      "p99_abs_error": 0.08577758073806763,
+      "max_abs_error": 0.08578646183013916
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-float",
+      "dyadic_terms": null,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.0001220971462316811,
+      "rmse": 0.000191775310668163,
+      "nrmse": 0.0002712056739255786,
+      "p99_abs_error": 0.0006841439753770828,
+      "max_abs_error": 0.0008910894393920898
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 1,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.1205815002322197,
+      "rmse": 0.14445069432258606,
+      "nrmse": 0.20427992939949036,
+      "p99_abs_error": 0.2732775807380676,
+      "max_abs_error": 0.27328646183013916
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 2,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.019535822793841362,
+      "rmse": 0.02602766826748848,
+      "nrmse": 0.03680792450904846,
+      "p99_abs_error": 0.05451345443725586,
+      "max_abs_error": 0.05452173948287964
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 3,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.0033977774437516928,
+      "rmse": 0.004476681351661682,
+      "nrmse": 0.0063308533281087875,
+      "p99_abs_error": 0.008757829666137695,
+      "max_abs_error": 0.009005367755889893
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 4,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.0004786791978403926,
+      "rmse": 0.0007425846415571868,
+      "nrmse": 0.001050151651725173,
+      "p99_abs_error": 0.0023617148399353027,
+      "max_abs_error": 0.0024436116218566895
+    },
+    {
+      "primitive": "reciprocal_unit_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 6,
+      "domain": "unit mantissa [1,2)",
+      "mae": 0.00012157606397522613,
+      "rmse": 0.00019058608449995518,
+      "nrmse": 0.0002695238799788058,
+      "p99_abs_error": 0.0006819376721978188,
+      "max_abs_error": 0.0008920431137084961
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "pao",
+      "dyadic_terms": null,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.057087838649749756,
+      "rmse": 0.063069187104702,
+      "nrmse": 0.06562766432762146,
+      "p99_abs_error": 0.11004257202148438,
+      "max_abs_error": 0.11011850833892822
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-float",
+      "dyadic_terms": null,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.00030095965485088527,
+      "rmse": 0.000595088058616966,
+      "nrmse": 0.0006192285218276083,
+      "p99_abs_error": 0.0026485957205295563,
+      "max_abs_error": 0.0037456750869750977
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 1,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.17087677121162415,
+      "rmse": 0.1955486238002777,
+      "nrmse": 0.2034812867641449,
+      "p99_abs_error": 0.36154383420944214,
+      "max_abs_error": 0.3673323392868042
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 2,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.02574903331696987,
+      "rmse": 0.035217344760894775,
+      "nrmse": 0.036645978689193726,
+      "p99_abs_error": 0.08909368515014648,
+      "max_abs_error": 0.0891869068145752
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 3,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.0063225384801626205,
+      "rmse": 0.008059639483690262,
+      "nrmse": 0.008386588655412197,
+      "p99_abs_error": 0.018246173858642578,
+      "max_abs_error": 0.019065380096435547
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 4,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.0011883596889674664,
+      "rmse": 0.0017755633452907205,
+      "nrmse": 0.0018475911347195506,
+      "p99_abs_error": 0.006866937503218651,
+      "max_abs_error": 0.00796496868133545
+    },
+    {
+      "primitive": "rsqrt_mantissa",
+      "method": "bpla-dyadic",
+      "dyadic_terms": 6,
+      "domain": "mantissa [0.5,2)",
+      "mae": 0.00031327514443546534,
+      "rmse": 0.00061938283033669,
+      "nrmse": 0.0006445088074542582,
+      "p99_abs_error": 0.0028445757925510406,
+      "max_abs_error": 0.003941655158996582
+    }
+  ],
+  "calibration_policies": [
+    {
+      "policy": "max",
+      "range": 36.493309020996094,
+      "dyadic_terms": 2,
+      "clamped_fraction": 0.0,
+      "nrmse": 0.025293312966823578,
+      "max_abs_error": 0.07664120197296143
+    },
+    {
+      "policy": "max",
+      "range": 36.493309020996094,
+      "dyadic_terms": 4,
+      "clamped_fraction": 0.0,
+      "nrmse": 0.00485706003382802,
+      "max_abs_error": 0.0327945239841938
+    },
+    {
+      "policy": "p99.99",
+      "range": 29.613603591918945,
+      "dyadic_terms": 2,
+      "clamped_fraction": 0.00010205016587860882,
+      "nrmse": 0.04257296770811081,
+      "max_abs_error": 6.879705429077148
+    },
+    {
+      "policy": "p99.99",
+      "range": 29.613603591918945,
+      "dyadic_terms": 4,
+      "clamped_fraction": 0.00010205016587860882,
+      "nrmse": 0.034606728702783585,
+      "max_abs_error": 6.879705429077148
+    },
+    {
+      "policy": "p99.9",
+      "range": 24.700132369995117,
+      "dyadic_terms": 2,
+      "clamped_fraction": 0.0010017578024417162,
+      "nrmse": 0.06814470887184143,
+      "max_abs_error": 11.793176651000977
+    },
+    {
+      "policy": "p99.9",
+      "range": 24.700132369995117,
+      "dyadic_terms": 4,
+      "clamped_fraction": 0.0010017578024417162,
+      "nrmse": 0.06340208649635315,
+      "max_abs_error": 11.793176651000977
+    },
+    {
+      "policy": "p99",
+      "range": 18.21040153503418,
+      "dyadic_terms": 2,
+      "clamped_fraction": 0.010000916197896004,
+      "nrmse": 0.12634196877479553,
+      "max_abs_error": 18.282907485961914
+    },
+    {
+      "policy": "p99",
+      "range": 18.21040153503418,
+      "dyadic_terms": 4,
+      "clamped_fraction": 0.010000916197896004,
+      "nrmse": 0.12388987094163895,
+      "max_abs_error": 18.282907485961914
+    }
+  ]
+}

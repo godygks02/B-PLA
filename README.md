@@ -19,14 +19,74 @@ PyTorch proxy modules for large-model sensitivity tests.
 - `modules/bpla_activation.py`: FP32 bit-field-routed B-PLA activation.
 - `modules/dyadic.py`: signed power-of-two dyadic coefficient utilities.
 - `modules/pla_snn.py`: term-free event-driven PLA compiler and conditional-accumulation runtime.
+- `modules/span_core.py`: SPAN spike packet, causal prefix, conditional-add, and threshold/reset primitives.
+- `modules/span_synapse.py`: static ANN-weight SPAN synapse compiler and fused Linear/MAC prototype.
+- `modules/span_ops.py`: causal unary activation and dynamic-dynamic mantissa-tile SPAN operators.
+- `modules/span_normalization.py`: Softmax and LayerNorm composed from SPAN static, dynamic, and unary primitives.
+- `modules/span_coverage.py`: conservative PyTorch graph coverage auditor for unmapped multiplication and transcendental modules.
+- `PASN/`: self-contained PASN research folder with modules, experiments,
+  results, tests, and lab-meeting Markdown.
 - `modules/torch_bpla.py`: CUDA-friendly PyTorch B-PLA proxy layers.
+- `modules/torch_pao.py`: PAO/PAM baseline (Kosson and Jaggi, NeurIPS 2023) forward primitives.
 - `modules/compute_energy.py`: memory-free theoretical arithmetic energy model.
 - `experiments/compute_energy_experiment.py`: primitive, MLP, ViT, and GPT-2 compute-energy comparison.
 - `experiments/bpla_mlp_experiment.py`: hardware-style MNIST MLP probe.
 - `experiments/torch_bpla_mlp_probe.py`: fast PyTorch MNIST MLP probe.
 - `experiments/torch_bpla_gpt2_probe.py`: GPT-2 B-PLA sensitivity probe.
 - `experiments/torch_bpla_vit_probe.py`: ViT B-PLA sensitivity probe.
-- `tests/`: unit tests for NumPy, SNN, dyadic, and torch proxy paths.
+- `experiments/pao_vs_bpla_primitive.py`: PAM vs. B-PLA multiplier fidelity, cost proxies, and accumulated bias.
+- `experiments/pao_vs_bpla_model.py`: Exact / PAO / B-PLA training-free drop-in on the same checkpoint.
+- `experiments/nonlinear_primitive_figure.py`: GELU three-panel figure, per-primitive fidelity, calibration-range policies.
+- `experiments/replacement_coverage.py`: audit of converted sites and exact remaining paths.
+- `tests/`: unit tests for NumPy, SNN, dyadic, torch proxy, and PAO baseline paths.
+
+## PAO Baseline Comparison
+
+`modules/torch_pao.py` reimplements the forward piecewise affine operations of
+Kosson and Jaggi (NeurIPS 2023) so both methods can be inserted into the same
+pretrained checkpoint with zero weight updates. `tests/test_pao.py` verifies it
+against the Mogami int-addition trick used by the authors' released kernel, and
+pins the published `-1/9` worst-case relative error.
+
+```bash
+python -m unittest tests.test_pao tests.test_bpla_table_forms
+python experiments/pao_vs_bpla_primitive.py --num-samples 400000
+python experiments/nonlinear_primitive_figure.py --model vit --num-images 8
+python experiments/replacement_coverage.py --scopes multiplication --replace-lm-head --replace-conv2d
+```
+
+## Table Construction and Replacement Scope
+
+Two `TorchBPLAConfig` fields control how coefficient tables are built. Both
+defaults are the better choice; the alternatives exist to reproduce older runs.
+
+- `multiplier_form` (default `separable`): the tile-centre plane is separable,
+  so `nu*m1 + mu*(m2-nu)` reproduces it from a single `2^k` array with no stored
+  offset. Against the legacy `plane` form this is 5.7x to 20x more accurate at
+  equal term budget and 48x smaller.
+- `anchor_mode` (default `auto`): the point each 1-D segment is expanded around
+  is chosen per table by measured error. Expanding about the `y`-intercept is a
+  long extrapolation for tables far from the origin; `auto` keeps the intercept
+  for `exp2` and moves it for the reciprocal and reciprocal square root.
+
+Two module types are outside the default replacement scope and convert only when
+asked, so that widening coverage stays an explicit and reported choice:
+
+- `replace_lm_head=True` converts GPT-2's output projection, 31% of its weighted
+  multiplies. The weight is shared rather than cloned so the tie to the token
+  embedding survives.
+- `replace_conv2d=True` converts ViT's patch embedding via `unfold`.
+
+With both enabled, weighted-multiply coverage is 100% on ViT-Base and GPT-2;
+without them it is 99.3% and 68.8%. Attention `QK`/`PV` products are converted in
+either case and are not counted in those totals, having no weight module.
+
+Two caveats are structural, not incidental. The PAO paper's models use ReLU and
+it defines no piecewise affine GELU, so `pao_gelu_torch` is our composition from
+its primitives. Section 2.7 of that paper sketches an `alpha` error-compensation
+constant but reports no results for it; the primitive experiment fits and reports
+it as the `pao-alpha` condition, because leaving it off would measure an
+avoidable deficiency of the baseline rather than a property of the method.
 
 ## Install
 
@@ -44,6 +104,36 @@ image before installing the remaining requirements.
 ```bash
 python -m unittest discover -s tests
 ```
+
+Run only the new full-arithmetic spiking prototypes:
+
+```bash
+python -m unittest tests.test_span tests.test_span_coverage -v
+```
+
+PASN (Prefix-Adaptive Spiking Neuron) is a separate SNN research
+path, not a rename of SPAN or a spiking implementation of B-PLA arithmetic.
+Its current prototype tests whether prefix-selected local basis banks can trade
+total parameter memory for fewer active bases and threshold comparisons than
+one global MBE-style neuron.
+Run the GELU falsification benchmark in an environment with PyTorch:
+
+```bash
+python PASN/experiments/pasn_operator_benchmark.py --external-mbe --plot
+```
+
+The generated operator-level results under `PASN/experiments/results/` are
+preliminary calibration evidence only.  They do not establish end-to-end SNN
+accuracy, latency, energy, or hardware benefit.
+
+SPAN (Spike-Prefix Affine Neuron) is the B-PLA + SNN conversion research path.
+The SPAN modules are hardware-oriented operator prototypes. With 23 mantissa
+events, the normal-FP32 static synapse and dynamic tile are regression-tested
+against the existing float-affine B-PLA multiplier. Their zero operands use a
+control path; subnormal, infinity, and NaN behavior is still a flagged software
+fallback rather than a multiplier-free hardware implementation. The coverage
+auditor establishes graph-replacement coverage only and does not replace RTL
+synthesis evidence for zero inferred multipliers or DSP blocks.
 
 Dry-run the large-model wrappers without downloading GPT-2 or ViT:
 
