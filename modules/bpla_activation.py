@@ -30,6 +30,10 @@ TARGETS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
     "tanh": np.tanh,
     "gelu": lambda x: 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3))),
     "quick_gelu": lambda x: x / (1.0 + np.exp(-1.702 * x)),
+    "silu": lambda x: x / (1.0 + np.exp(-x)),
+    "exp2_fraction": np.exp2,
+    "reciprocal": lambda x: 1.0 / x,
+    "rsqrt": lambda x: 1.0 / np.sqrt(x),
 }
 
 
@@ -102,9 +106,11 @@ def build_activation_table(
         else:
             # Empty bit-prefix cells can occur near range boundaries. They are
             # unreachable for the calibration range, so use a benign constant
-            # fallback at zero.
+            # fallback at the closest in-range value to zero.  This also keeps
+            # reciprocal/rsqrt table construction finite for positive domains.
             slopes[i] = 0.0
-            intercepts[i] = target(np.array([0.0], dtype=np.float64))[0]
+            fallback_x = float(np.clip(0.0, x_min, x_max))
+            intercepts[i] = target(np.array([fallback_x], dtype=np.float64))[0]
 
     return BPLAActivationTable(
         slopes=slopes,
