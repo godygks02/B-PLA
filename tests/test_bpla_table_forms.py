@@ -9,6 +9,8 @@ path and strict improvement on the dyadic path.
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 import sys
 import unittest
@@ -236,6 +238,58 @@ class CoverageGapTests(unittest.TestCase):
         module = torch.nn.Sequential(torch.nn.Conv2d(3, 4, 3), torch.nn.Linear(4, 4))
         replace_linear_and_gelu(module, config, replace_gelu=False, replace_conv2d=True)
         self.assertIsInstance(module[0], TorchBPLAConv2d)
+
+
+class CompiledPathTests(unittest.TestCase):
+    """Fusing the elementwise chain must not change what it computes.
+
+    An earlier version was validated on one fixed shape and on the unit tests,
+    both of which passed while the compiled path was silently wrong inside a
+    model, where the multiply is called with many shapes and broadcast patterns.
+    This runs both paths in one subprocess -- reloading the module in-process
+    leaks stale classes into other tests -- and compares them exactly.
+    """
+
+    def test_compiled_multiply_matches_eager_across_broadcast_shapes(self):
+        script = f"""
+import os, sys, torch
+sys.path.insert(0, {str(ROOT)!r})
+os.environ["BPLA_COMPILE"] = "0"
+from modules.torch_bpla import TorchBPLAConfig, bpla_multiply_torch
+
+config = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+shapes = [((4096,), (4096,)),
+          ((64, 1, 128), (1, 32, 128)),
+          ((2, 12, 64, 1, 64), (2, 12, 1, 16, 64))]
+operands, expected = [], []
+for shape_a, shape_b in shapes:
+    torch.manual_seed(11)
+    a, b = torch.randn(*shape_a), torch.randn(*shape_b)
+    operands.append((a, b))
+    expected.append(bpla_multiply_torch(a, b, config))
+
+import importlib, modules.torch_bpla as m
+os.environ["BPLA_COMPILE"] = "1"
+importlib.reload(m)
+if not m._COMPILE:
+    print("SKIP compilation disabled"); raise SystemExit
+bad = []
+for (a, b), want in zip(operands, expected):
+    try:
+        got = m.bpla_multiply_torch(a, b, config)
+    except Exception as error:
+        print("SKIP", type(error).__name__); raise SystemExit
+    if not torch.equal(got, want):
+        bad.append(tuple(a.shape) + tuple(b.shape))
+print("MISMATCH" if bad else "MATCH", bad)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, timeout=600
+        )
+        output = result.stdout.strip()
+        if output.startswith("SKIP"):
+            self.skipTest(f"compilation unavailable here: {output}")
+        self.assertTrue(output.startswith("MATCH"), msg=output + result.stderr[-2000:])
 
 
 if __name__ == "__main__":
