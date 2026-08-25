@@ -1,0 +1,88 @@
+{
+  "configuration": {
+    "models": [
+      "gpt2"
+    ],
+    "backends": [
+      "exact",
+      "pao"
+    ],
+    "scopes": [
+      "multiplication"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 64,
+    "batch_size": 4,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 25600,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "max_shift": 16,
+    "activation_range": 4.0,
+    "linear_chunk_out": 512,
+    "calibration_batches": 2,
+    "calibrate_activation": true,
+    "replace_layernorm": false,
+    "replace_lm_head": false,
+    "replace_conv2d": false,
+    "pao_alpha": 1.056,
+    "seed": 0,
+    "device": "cuda",
+    "save_logits": true,
+    "output": "results/t2_gpt2_pao_alpha.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "gpt2",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 5.656359297223389,
+      "perplexity": 46.472186744805256,
+      "tokens": 25500,
+      "samples": 100
+    },
+    {
+      "model": "gpt2",
+      "scope": "multiplication",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 48,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 2640.968259045854,
+      "perplexity": 46.94377434413141,
+      "tokens": 25500,
+      "samples": 100,
+      "logit_mae": 0.13745263713513367,
+      "logit_rmse": 0.18515366934635463,
+      "logit_nrmse": 0.05815016245240845,
+      "argmax_agreement": 92.83203125,
+      "output_gain": 0.9913551033570996,
+      "uncentered_logit_mae": 2.6931612524057087,
+      "uncentered_output_gain": 0.9978112855632787
+    }
+  ]
+}

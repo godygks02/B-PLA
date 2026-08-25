@@ -1,0 +1,78 @@
+[09:25:28] === driver start: gpt2_tokens=25600 head_tokens=5120 vit=200 ===
+[09:25:28] START t1_gpt2_blocks
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7772.19it/s]
+    perplexity=46.4722
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7850.23it/s]
+    perplexity=47.3379, logit_nrmse=0.0898, argmax_agreement=88.2344, output_gain=1.0009
+[gpt2] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4728.42it/s]
+    perplexity=46.4726, logit_nrmse=0.0003, argmax_agreement=99.9688, output_gain=1.0000
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6699.08it/s]
+    perplexity=46.4724, logit_nrmse=0.0006, argmax_agreement=99.9297, output_gain=1.0000
+
+wrote results/t1_gpt2_blocks.json
+[10:07:15] DONE  t1_gpt2_blocks
+[10:07:15] START t2_gpt2_pao_alpha
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7973.55it/s]
+    perplexity=46.4722
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7815.83it/s]
+    perplexity=46.9438, logit_nrmse=0.0582, argmax_agreement=92.8320, output_gain=0.9914
+
+wrote results/t2_gpt2_pao_alpha.json
+[10:52:16] DONE  t2_gpt2_pao_alpha
+[10:52:16] START t3_gpt2_full_coverage
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8183.90it/s]
+    perplexity=47.5813
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7917.41it/s]
+    perplexity=48.6687, logit_nrmse=0.1027, argmax_agreement=88.2031, output_gain=0.9741
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5503.75it/s]
+    perplexity=47.5813, logit_nrmse=0.0020, argmax_agreement=99.7852, output_gain=1.0000
+
+wrote results/t3_gpt2_full_coverage.json
+[11:00:03] DONE  t3_gpt2_full_coverage
+[11:00:03] START t4_vit_blocks
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6351.45it/s]
+    top1=88.4615, top5=99.0385
+[vit] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7774.93it/s]
+    top1=88.9423, top5=99.5192, logit_nrmse=0.1497, argmax_agreement=97.5962, output_gain=0.9703
+[vit] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6773.04it/s]
+    top1=88.4615, top5=99.0385, logit_nrmse=0.0002, argmax_agreement=100.0000, output_gain=1.0000
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7916.99it/s]
+    top1=88.4615, top5=99.0385, logit_nrmse=0.0005, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/t4_vit_blocks.json
+[12:11:53] DONE  t4_vit_blocks
+[12:11:53] START t5_vit_full_coverage
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 5755.48it/s]
+    top1=88.4615, top5=99.0385
+[vit] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7637.25it/s]
+    top1=89.9038, top5=100.0000, logit_nrmse=0.1536, argmax_agreement=97.5962, output_gain=0.9703
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7003.64it/s]
+    top1=88.4615, top5=99.0385, logit_nrmse=0.0005, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/t5_vit_full_coverage.json
+[12:58:33] DONE  t5_vit_full_coverage
+[12:58:33] === driver finished ===

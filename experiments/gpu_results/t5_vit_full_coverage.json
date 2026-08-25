@@ -1,0 +1,113 @@
+{
+  "configuration": {
+    "models": [
+      "vit"
+    ],
+    "backends": [
+      "exact",
+      "pao",
+      "bpla-dyadic"
+    ],
+    "scopes": [
+      "multiplication"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 200,
+    "batch_size": 16,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 2048,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "max_shift": 16,
+    "activation_range": 4.0,
+    "linear_chunk_out": 512,
+    "calibration_batches": 2,
+    "calibrate_activation": true,
+    "replace_layernorm": false,
+    "replace_lm_head": false,
+    "replace_conv2d": true,
+    "pao_alpha": null,
+    "seed": 0,
+    "device": "cuda",
+    "save_logits": true,
+    "output": "results/t5_vit_full_coverage.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "vit",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 0.8711156817153096,
+      "top1": 88.46153846153847,
+      "top5": 99.03846153846153,
+      "samples": 208
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 74,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 1254.883643353358,
+      "top1": 89.90384615384616,
+      "top5": 100.0,
+      "samples": 208,
+      "logit_mae": 0.12884510009173386,
+      "logit_rmse": 0.17995936942623098,
+      "logit_nrmse": 0.15360653718163425,
+      "argmax_agreement": 97.59615325927734,
+      "output_gain": 0.9702974177103006,
+      "uncentered_logit_mae": 0.12884542549439132,
+      "uncentered_output_gain": 0.9702974285839651
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 74,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 1535.35831919685,
+      "top1": 88.46153846153847,
+      "top5": 99.03846153846153,
+      "samples": 208,
+      "logit_mae": 0.00045496911525195246,
+      "logit_rmse": 0.0006372727509421495,
+      "logit_nrmse": 0.0005439520088592244,
+      "argmax_agreement": 100.0,
+      "output_gain": 1.0000096469161768,
+      "uncentered_logit_mae": 0.00045503492202526386,
+      "uncentered_output_gain": 1.0000096468250599
+    }
+  ]
+}
