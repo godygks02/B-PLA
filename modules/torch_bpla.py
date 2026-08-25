@@ -10,6 +10,7 @@ class of B-PLA approximation?"
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Literal
 
@@ -213,11 +214,33 @@ _COMPILE = os.environ.get("BPLA_COMPILE", "0") not in {"0", "", "false", "False"
 _COMPILED: dict[str, Any] = {}
 
 
+_PROBE_ARGS: dict[str, tuple[Any, ...]] = {}
+
+
 def _compiled(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Return a fused version of ``fn``, or ``fn`` itself if fusing is unavailable.
+
+    Compilation needs a working backend toolchain, which is not present on every
+    machine this runs on. A missing compiler must not change what the code
+    computes, so a failure here degrades to eager and says so once.
+    """
+
     if not _COMPILE:
         return fn
     if name not in _COMPILED:
-        _COMPILED[name] = torch.compile(fn, dynamic=True)
+        try:
+            compiled = torch.compile(fn, dynamic=True)
+            probe = torch.zeros(2)
+            compiled(probe, probe, *_PROBE_ARGS.get(name, ()))
+            _COMPILED[name] = compiled
+        except Exception as error:  # pragma: no cover - depends on the toolchain
+            warnings.warn(
+                f"BPLA_COMPILE was requested but {name} could not be fused "
+                f"({type(error).__name__}); falling back to eager execution.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            _COMPILED[name] = fn
     return _COMPILED[name]
 
 
@@ -231,6 +254,7 @@ def bpla_multiply_torch(
 
     _validate_config(config)
     shared = tables or SharedBPLATables(config)
+    _PROBE_ARGS.setdefault("multiply", (config, shared))
     return _compiled("multiply", _bpla_multiply_impl)(a, b, config, shared)
 
 
