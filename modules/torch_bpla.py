@@ -52,6 +52,12 @@ class TorchBPLAConfig:
     #: exact arithmetic and differ only in how dyadic quantization error enters,
     #: where ``separable`` is strictly better and cheaper.
     multiplier_form: str = "separable"
+    #: Signed power-of-two term budget for the one-dimensional nonlinear tables.
+    #: ``None`` reuses ``dyadic_terms``. They are separable because the two
+    #: paths do not need the same budget: the multiplier reaches its float
+    #: floor at T=3, while the reciprocal and reciprocal-square-root tables are
+    #: still improving well past it.
+    nonlinear_dyadic_terms: int | None = None
     #: Reference point each one-dimensional segment is expanded around.
     #: ``auto`` picks per table by measured error at build time; the fixed
     #: choices are ``intercept`` (legacy, expand about x=0), ``left`` (segment
@@ -173,6 +179,8 @@ def _validate_config(config: TorchBPLAConfig) -> None:
         raise ValueError("affine_path must be 'float' or 'dyadic'.")
     if config.dyadic_terms <= 0:
         raise ValueError("dyadic_terms must be positive.")
+    if config.nonlinear_dyadic_terms is not None and config.nonlinear_dyadic_terms <= 0:
+        raise ValueError("nonlinear_dyadic_terms must be positive when set.")
     if config.max_shift < 0:
         raise ValueError("max_shift must be non-negative.")
 
@@ -188,6 +196,20 @@ def _signed_pot_quantize(values: torch.Tensor, terms: int, max_shift: int) -> to
         term = residual.sign() * torch.pow(torch.tensor(2.0, device=values.device, dtype=values.dtype), -shift)
         approx = approx + torch.where(active, term, torch.zeros_like(term))
     return approx
+
+
+def _nonlinear_config(config: TorchBPLAConfig) -> TorchBPLAConfig:
+    """The config a nonlinear table should quantize with."""
+
+    if config.nonlinear_dyadic_terms in (None, config.dyadic_terms):
+        return config
+    return TorchBPLAConfig(
+        **{**config.__dict__, "dyadic_terms": config.nonlinear_dyadic_terms}
+    )
+
+
+def _maybe_dyadic_nonlinear(values: torch.Tensor, config: TorchBPLAConfig) -> torch.Tensor:
+    return _maybe_dyadic(values, _nonlinear_config(config))
 
 
 def _maybe_dyadic(values: torch.Tensor, config: TorchBPLAConfig) -> torch.Tensor:
@@ -406,7 +428,7 @@ def _select_anchor(
     best. Tables are built once per model, so this costs nothing at run time.
     """
 
-    quantized_slopes = _maybe_dyadic(slopes, config)
+    quantized_slopes = _maybe_dyadic_nonlinear(slopes, config)
     exact = target(probe)
     index = index_of(probe)
 
@@ -417,7 +439,7 @@ def _select_anchor(
     }
 
     def error_of(anchor_x: torch.Tensor, anchor_y: torch.Tensor) -> float:
-        approx = _maybe_dyadic(anchor_y, config)[index] + quantized_slopes[index] * (
+        approx = _maybe_dyadic_nonlinear(anchor_y, config)[index] + quantized_slopes[index] * (
             probe - anchor_x[index]
         )
         return float((approx - exact).pow(2).mean())
@@ -430,7 +452,7 @@ def _select_anchor(
     anchor_x, anchor_y = candidates[mode]
     return {
         "anchor_x": anchor_x,
-        "anchor_y": _maybe_dyadic(anchor_y, config),
+        "anchor_y": _maybe_dyadic_nonlinear(anchor_y, config),
         "anchor_mode": mode,
     }
 
@@ -463,7 +485,7 @@ def _build_functional_table(
         ),
     )
     return {
-        "slopes": _maybe_dyadic(slopes, config),
+        "slopes": _maybe_dyadic_nonlinear(slopes, config),
         "anchor_x": anchors["anchor_x"],
         "anchor_y": anchors["anchor_y"],
         "anchor_mode": anchors["anchor_mode"],
@@ -813,10 +835,10 @@ def build_activation_table_torch(
                     points[seg] = reduce(x_seg)
             candidates[name] = (points, TARGETS[target_name](points))
 
-        quantized_slopes = _maybe_dyadic(slopes, config)
+        quantized_slopes = _maybe_dyadic_nonlinear(slopes, config)
 
         def error_of(points: torch.Tensor, values: torch.Tensor) -> float:
-            approx = _maybe_dyadic(values, config)[idx] + quantized_slopes[idx] * (xs - points[idx])
+            approx = _maybe_dyadic_nonlinear(values, config)[idx] + quantized_slopes[idx] * (xs - points[idx])
             return float((approx - ys).pow(2).mean())
 
         mode = (
@@ -829,9 +851,9 @@ def build_activation_table_torch(
         mode = "intercept"
 
     return {
-        "slopes": _maybe_dyadic(slopes, config),
+        "slopes": _maybe_dyadic_nonlinear(slopes, config),
         "anchor_x": anchor_x,
-        "anchor_y": _maybe_dyadic(anchor_y, config),
+        "anchor_y": _maybe_dyadic_nonlinear(anchor_y, config),
         "anchor_mode": mode,
         "min_e_routing": min_e_routing,
         "max_e_routing": max_e_routing,

@@ -66,6 +66,7 @@ def _bpla_config(args: argparse.Namespace, affine_path: str) -> TorchBPLAConfig:
         prefix_bits=args.prefix_bits,
         affine_path=affine_path,
         dyadic_terms=args.dyadic_terms,
+        nonlinear_dyadic_terms=args.nonlinear_dyadic_terms,
         max_shift=args.max_shift,
         activation_range=args.activation_range,
         linear_chunk_out=args.linear_chunk_out,
@@ -384,6 +385,12 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--prefix-bits", type=int, default=4)
     parser.add_argument("--dyadic-terms", type=int, default=2)
+    parser.add_argument(
+        "--nonlinear-dyadic-terms",
+        type=int,
+        default=None,
+        help="Term budget for the nonlinear tables; defaults to --dyadic-terms.",
+    )
     parser.add_argument("--max-shift", type=int, default=16)
     parser.add_argument("--activation-range", type=float, default=4.0)
     parser.add_argument("--linear-chunk-out", type=int, default=128)
