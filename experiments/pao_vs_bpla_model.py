@@ -417,6 +417,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Cache raw logits per condition so metrics can be recomputed without rerunning.",
     )
+    parser.add_argument(
+        "--max-logit-cache-gb",
+        type=float,
+        default=2.0,
+        help="Skip the logit cache above this size. Language-model logits are "
+             "tokens x vocabulary and grow far faster than the runtime they save.",
+    )
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parent / "pao_vs_bpla_model.json")
     return parser.parse_args()
 
@@ -483,9 +490,21 @@ def main() -> None:
                 if args.save_logits:
                     # Caching the raw outputs means a change to the comparison
                     # metrics never costs another emulated forward pass, which
-                    # on CPU is the expensive part by orders of magnitude.
-                    cache = args.output.parent / f"{args.output.stem}_{model_name}_{scope}_{backend}.pt"
-                    torch.save(logits.to(torch.float32), cache)
+                    # is the expensive part by orders of magnitude. It is only
+                    # worth it when the outputs are small: a language model's
+                    # logits are tokens x vocabulary, which for GPT-2 at 25k
+                    # tokens is 4.8 GB per condition and fills a disk long
+                    # before it saves any time.
+                    gigabytes = logits.numel() * 4 / 1024**3
+                    if gigabytes > args.max_logit_cache_gb:
+                        print(
+                            f"    (skipping logit cache: {gigabytes:.2f} GB exceeds "
+                            f"--max-logit-cache-gb={args.max_logit_cache_gb})",
+                            flush=True,
+                        )
+                    else:
+                        cache = args.output.parent / f"{args.output.stem}_{model_name}_{scope}_{backend}.pt"
+                        torch.save(logits.to(torch.float32), cache)
 
                 entry: dict[str, object] = {
                     "model": model_name,
