@@ -55,6 +55,7 @@ from modules.torch_pao import (
     replace_pao_layer_norms,
     replace_pao_linear_and_gelu,
 )
+from modules.torch_fqvit import replace_fqvit_layer_norms
 from modules.torch_ptq import (
     TorchPTQConfig,
     calibrate_ptq_model,
@@ -75,6 +76,7 @@ BACKENDS = (
     "exact",
     "ptq-w8a8",
     "ptq-w8a8-static",
+    "ptq-fqvit",
     "pao",
     "pao-alpha",
     "bpla-float",
@@ -95,7 +97,22 @@ PAO_BACKENDS = {"pao", "pao-alpha"}
 #: uses static per-tensor scales from percentile calibration, the conventional
 #: recipe. Reporting only the first would look like a straw man in reverse;
 #: reporting only the second would be the straw man.
-PTQ_GRANULARITY = {"ptq-w8a8": "token", "ptq-w8a8-static": "tensor"}
+PTQ_GRANULARITY = {
+    "ptq-w8a8": "token",
+    "ptq-w8a8-static": "tensor",
+    # FQ-ViT quantizes activations layer-wise with a min-max observer, which is
+    # our per-tensor setting with the percentile clipping turned off.
+    "ptq-fqvit": "tensor",
+}
+
+#: FQ-ViT (Lin et al., IJCAI 2022) is the only training-free method that reaches
+#: the nonlinear operators, so it is the one baseline that has a combined-scope
+#: row at all. It does not address GELU -- the paper never mentions it -- so its
+#: coverage is int8 matmuls plus LayerNorm (Power-of-Two Factor) plus Softmax
+#: (Log-Int-Softmax), with GELU left exact. That is narrower than B-PLA's
+#: combined scope and the table has to say so, or a coverage difference reads as
+#: a fidelity difference.
+FQVIT_BACKEND = "ptq-fqvit"
 
 #: W8A8 quantizes weights and activations and leaves the nonlinearities in
 #: floating point, which is the convention the published numbers are measured
@@ -152,18 +169,22 @@ def convert(
         return record
 
     if backend in PTQ_GRANULARITY:
-        if scope not in PTQ_SCOPES:
+        is_fqvit = backend == FQVIT_BACKEND
+        allowed = ("multiplication", "combined") if is_fqvit else PTQ_SCOPES
+        if scope not in allowed:
             raise ValueError(
-                f"The {backend} backend has no {scope!r} scope: W8A8 leaves GELU, "
-                "Softmax and LayerNorm in floating point by construction. Run it "
-                "at the multiplication scope and compare there."
+                f"The {backend} backend has no {scope!r} scope. W8A8 leaves GELU, "
+                "Softmax and LayerNorm in floating point by construction; FQ-ViT "
+                f"reaches Softmax and LayerNorm but not GELU. Allowed: {list(allowed)}."
             )
         config = TorchPTQConfig(
             weight_bits=args.ptq_weight_bits,
             activation_bits=args.ptq_activation_bits,
             per_channel_weights=args.ptq_per_channel_weights,
-            activation_percentile=args.ptq_percentile,
+            # FQ-ViT calibrates activations with min-max, not a percentile.
+            activation_percentile=100.0 if is_fqvit else args.ptq_percentile,
             activation_granularity=PTQ_GRANULARITY[backend],
+            softmax_log2_bits=args.fqvit_softmax_bits if is_fqvit else None,
         )
         if is_gpt2:
             record["linear_modules"] = replace_ptq_gpt2_conv1d(
@@ -174,6 +195,10 @@ def convert(
                 model, config, replace_conv2d=args.replace_conv2d
             )
         record["attention_blocks"] = replace_ptq_attention_matmuls(model, config, mode="ptq-full")
+        if is_fqvit and replace_nonlinear:
+            # GELU stays exact: activation_modules is left at zero on purpose,
+            # and that zero is the coverage difference against B-PLA.
+            record["layernorm_modules"] = replace_fqvit_layer_norms(model, config)
         start = time.perf_counter()
         # Same batches, same count, same forward-only contract as the B-PLA
         # calibration below, so neither method gets more data than the other.
@@ -539,6 +564,12 @@ def parse_args() -> argparse.Namespace:
         help="Also convert ViT's patch-embedding convolution.",
     )
     parser.add_argument("--ptq-weight-bits", type=int, default=8)
+    parser.add_argument(
+        "--fqvit-softmax-bits",
+        type=int,
+        default=4,
+        help="Log-Int-Softmax bit width for the ptq-fqvit backend. FQ-ViT uses 4.",
+    )
     parser.add_argument("--ptq-activation-bits", type=int, default=8)
     parser.add_argument(
         "--ptq-percentile",
@@ -614,7 +645,8 @@ def main() -> None:
 
     # Fail before the first checkpoint is downloaded rather than hours into a
     # run: an unsupported combination costs the whole queue if it surfaces late.
-    if any(backend in PTQ_GRANULARITY for backend in args.backends):
+    plain_w8a8 = [b for b in args.backends if b in PTQ_GRANULARITY and b != FQVIT_BACKEND]
+    if plain_w8a8:
         unsupported = [scope for scope in args.scopes if scope not in PTQ_SCOPES]
         if unsupported:
             raise SystemExit(

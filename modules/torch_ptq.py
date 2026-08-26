@@ -132,6 +132,11 @@ class TorchPTQConfig:
     activation_percentile: float = 99.99
     histogram_bins: int = 2048
     activation_granularity: str = "tensor"
+    #: When set, attention probabilities go on a power-of-two grid at this bit
+    #: width instead of the uniform activation grid -- FQ-ViT's Log-Int-Softmax,
+    #: which the paper runs at 4 bits. Softmax output is bounded to (0, 1), so
+    #: unlike every other activation here it needs no calibrated range.
+    softmax_log2_bits: int | None = None
 
 
 def _validate_config(config: TorchPTQConfig) -> None:
@@ -145,6 +150,10 @@ def _validate_config(config: TorchPTQConfig) -> None:
         )
     if config.histogram_bins < 16:
         raise ValueError(f"histogram_bins must be at least 16, got {config.histogram_bins}.")
+    if config.softmax_log2_bits is not None and not 2 <= config.softmax_log2_bits <= 8:
+        raise ValueError(
+            f"softmax_log2_bits must be in [2, 8], got {config.softmax_log2_bits}."
+        )
     if config.activation_granularity not in GRANULARITIES:
         raise ValueError(
             f"Unknown activation_granularity {config.activation_granularity!r}. "
@@ -504,9 +513,26 @@ class PTQAttentionObservers:
             signed=self.observers[name].signed,
         )
 
+    @property
+    def _unused(self) -> set[str]:
+        """Observers this configuration never feeds.
+
+        Log-Int-Softmax puts the attention probabilities on a power-of-two grid
+        determined by the softmax's own (0, 1) bound, so it observes no range.
+        That observer is then legitimately empty, and finalizing must skip it
+        rather than treat it as an uncalibrated site -- while still refusing to
+        skip one that was merely never reached.
+        """
+
+        return {"probability"} if self.config.softmax_log2_bits is not None else set()
+
     def finalize(self) -> dict[str, float]:
         if self.state != QUANTIZED:
-            self.ranges = {name: obs.resolve() for name, obs in self.observers.items()}
+            self.ranges = {
+                name: obs.resolve()
+                for name, obs in self.observers.items()
+                if name not in self._unused
+            }
             self.state = QUANTIZED
         return self.ranges
 
@@ -574,7 +600,16 @@ def replace_ptq_attention_matmuls(
             attention_weights, p=dropout, training=attention_module.training
         )
         if use_pv:
-            probabilities_q = observers.apply("probability", attention_weights)
+            if config.softmax_log2_bits is not None:
+                # FQ-ViT's Log-Int-Softmax. Bounded to (0, 1), so it needs no
+                # observed range and stays correct even in the observing state.
+                from modules.torch_fqvit import log2_quantize_attention
+
+                probabilities_q = log2_quantize_attention(
+                    attention_weights, config.softmax_log2_bits
+                )
+            else:
+                probabilities_q = observers.apply("probability", attention_weights)
             value_q = observers.apply("value", value)
             attention_output = torch.matmul(probabilities_q, value_q)
         else:
@@ -660,8 +695,20 @@ def replace_ptq_gpt2_conv1d(
 # ------------------------------------------------------------------ calibration
 
 
-def _ptq_sites(model: nn.Module) -> tuple[list[_PTQQuantizedModule], list[PTQAttentionObservers]]:
-    layers = [child for child in model.modules() if isinstance(child, _PTQQuantizedModule)]
+def _ptq_sites(model: nn.Module) -> tuple[list[nn.Module], list[PTQAttentionObservers]]:
+    """Collect every calibratable site, by protocol rather than by class.
+
+    The FQ-ViT LayerNorm proxy lives in a module that imports this one, so it
+    cannot be named here without a cycle. It carries the same three-state
+    ``ptq_state`` and the same ``_finalize`` and ``observer`` members, which is
+    all the calibration driver needs.
+    """
+
+    layers = [
+        child
+        for child in model.modules()
+        if hasattr(child, "ptq_state") and hasattr(child, "_finalize")
+    ]
     attentions = [
         child._ptq_observers
         for child in model.modules()
@@ -742,6 +789,8 @@ def finalize_ptq_model(model: nn.Module) -> dict[str, object]:
         "activation_range_min": min(layer_ranges) if layer_ranges else None,
         "activation_range_max": max(layer_ranges) if layer_ranges else None,
         "attention_probability_range_max": (
-            max(r["probability"] for r in attention_ranges) if attention_ranges else None
+            max(r["probability"] for r in attention_ranges)
+            if attention_ranges and all("probability" in r for r in attention_ranges)
+            else None
         ),
     }
