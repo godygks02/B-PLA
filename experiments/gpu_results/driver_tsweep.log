@@ -1,0 +1,117 @@
+[22:20:30] === nonlinear term sweep: multiplier held at T=2 ===
+[22:20:30] START n1_gpt2_nonlinear_T2
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8222.60it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7511.22it/s]
+    perplexity=47.6910, logit_nrmse=0.0684, argmax_agreement=91.3906, output_gain=0.9914
+
+wrote results/n1_gpt2_nonlinear_T2.json
+[22:21:42] DONE  n1_gpt2_nonlinear_T2 (72s)
+[22:21:42] START n2_vit_nonlinear_T2
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7372.20it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7882.70it/s]
+    top1=85.9375, top5=99.2188, logit_nrmse=0.0998, argmax_agreement=95.3125, output_gain=1.0038
+
+wrote results/n2_vit_nonlinear_T2.json
+[22:22:01] DONE  n2_vit_nonlinear_T2 (19s)
+[22:22:01] START n1_gpt2_nonlinear_T3
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8039.12it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7999.65it/s]
+    perplexity=46.4666, logit_nrmse=0.0262, argmax_agreement=96.8398, output_gain=1.0007
+
+wrote results/n1_gpt2_nonlinear_T3.json
+[22:23:13] DONE  n1_gpt2_nonlinear_T3 (72s)
+[22:23:13] START n2_vit_nonlinear_T3
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6170.04it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8174.44it/s]
+    top1=86.3281, top5=99.2188, logit_nrmse=0.0231, argmax_agreement=98.4375, output_gain=0.9982
+
+wrote results/n2_vit_nonlinear_T3.json
+[22:23:32] DONE  n2_vit_nonlinear_T3 (19s)
+[22:23:32] START n1_gpt2_nonlinear_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7978.88it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6993.58it/s]
+    perplexity=46.5578, logit_nrmse=0.0210, argmax_agreement=97.3008, output_gain=0.9992
+
+wrote results/n1_gpt2_nonlinear_T4.json
+[22:24:43] DONE  n1_gpt2_nonlinear_T4 (71s)
+[22:24:43] START n2_vit_nonlinear_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7536.80it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7975.78it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0089, argmax_agreement=100.0000, output_gain=1.0003
+
+wrote results/n2_vit_nonlinear_T4.json
+[22:25:02] DONE  n2_vit_nonlinear_T4 (19s)
+[22:25:02] START n1_gpt2_nonlinear_T6
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8064.50it/s]
+    perplexity=46.4722
+[gpt2] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7191.43it/s]
+    perplexity=46.5744, logit_nrmse=0.0208, argmax_agreement=97.3555, output_gain=0.9991
+
+wrote results/n1_gpt2_nonlinear_T6.json
+[22:26:13] DONE  n1_gpt2_nonlinear_T6 (71s)
+[22:26:13] START n2_vit_nonlinear_T6
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=nonlinear backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6118.20it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=nonlinear backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8012.27it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0074, argmax_agreement=99.2188, output_gain=1.0000
+
+wrote results/n2_vit_nonlinear_T6.json
+[22:26:32] DONE  n2_vit_nonlinear_T6 (19s)
+[22:26:32] START n3_gpt2_combined_mixed
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8253.43it/s]
+    perplexity=46.4722
+[gpt2] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8068.28it/s]
+    perplexity=46.5749, logit_nrmse=0.0207, argmax_agreement=97.4258, output_gain=0.9993
+
+wrote results/n3_gpt2_combined_mixed.json
+[22:41:28] DONE  n3_gpt2_combined_mixed (896s)
+[22:41:28] START n4_vit_combined_mixed
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6132.61it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8030.99it/s]
+    top1=87.1094, top5=99.2188, logit_nrmse=0.0074, argmax_agreement=99.6094, output_gain=1.0000
+
+wrote results/n4_vit_combined_mixed.json
+[23:21:34] DONE  n4_vit_combined_mixed (2406s)
+[23:21:34] === sweep finished ===

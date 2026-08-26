@@ -1,0 +1,54 @@
+[23:21:56] === recommended operating point: multiplier T=2, nonlinear T=4 ===
+[23:21:56] START r1_gpt2_combined_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8597.39it/s]
+    perplexity=46.4722
+[gpt2] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7339.81it/s]
+    perplexity=46.5798, logit_nrmse=0.0210, argmax_agreement=97.4922, output_gain=0.9992
+
+wrote results/r1_gpt2_combined_T4.json
+[23:36:51] DONE  r1_gpt2_combined_T4 (895s)
+[23:36:51] START r2_vit_combined_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7922.97it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7696.96it/s]
+    top1=86.3281, top5=99.2188, logit_nrmse=0.0089, argmax_agreement=99.6094, output_gain=1.0003
+
+wrote results/r2_vit_combined_T4.json
+[00:16:57] DONE  r2_vit_combined_T4 (2406s)
+[00:16:57] START r3_gpt2_full_coverage_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8010.18it/s]
+    perplexity=47.5813
+[gpt2] scope=combined backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7780.18it/s]
+    perplexity=63.4232, logit_nrmse=0.2644, argmax_agreement=65.0391, output_gain=0.9428
+[gpt2] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6382.19it/s]
+    perplexity=47.6763, logit_nrmse=0.0208, argmax_agreement=97.4023, output_gain=0.9992
+
+wrote results/r3_gpt2_full_coverage_T4.json
+[00:24:47] DONE  r3_gpt2_full_coverage_T4 (470s)
+[00:24:47] START r4_vit_full_coverage_T4
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=combined backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6991.96it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=combined backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7764.79it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.3634, argmax_agreement=88.2812, output_gain=0.9045
+[vit] scope=combined backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7512.84it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0088, argmax_agreement=99.2188, output_gain=1.0001
+
+wrote results/r4_vit_full_coverage_T4.json
+[01:36:40] DONE  r4_vit_full_coverage_T4 (4313s)
+[01:36:40] === T=4 pass finished ===
