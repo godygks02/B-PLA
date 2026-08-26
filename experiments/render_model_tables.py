@@ -20,12 +20,16 @@ from pathlib import Path
 
 BACKEND_LABEL = {
     "exact": "Exact",
+    "ptq-w8a8": "W8A8 PTQ (per-token)",
+    "ptq-w8a8-static": "W8A8 PTQ (per-tensor)",
     "pao": r"\pam{}",
     "bpla-float": r"\bpla{} float",
     "bpla-dyadic": r"\bpla{} dyadic",
 }
 BACKEND_PLAIN = {
     "exact": "Exact",
+    "ptq-w8a8": "W8A8 PTQ (per-token)",
+    "ptq-w8a8-static": "W8A8 PTQ (per-tensor)",
     "pao": "PAM",
     "bpla-float": "B-PLA float",
     "bpla-dyadic": "B-PLA dyadic",

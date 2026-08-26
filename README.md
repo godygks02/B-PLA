@@ -28,6 +28,7 @@ PyTorch proxy modules for large-model sensitivity tests.
   results, tests, and lab-meeting Markdown.
 - `modules/torch_bpla.py`: CUDA-friendly PyTorch B-PLA proxy layers.
 - `modules/torch_pao.py`: PAO/PAM baseline (Kosson and Jaggi, NeurIPS 2023) forward primitives.
+- `modules/torch_ptq.py`: W8A8 post-training-quantization baseline (per-token and per-tensor activation scales).
 - `modules/compute_energy.py`: memory-free theoretical arithmetic energy model.
 - `experiments/compute_energy_experiment.py`: primitive, MLP, ViT, and GPT-2 compute-energy comparison.
 - `experiments/bpla_mlp_experiment.py`: hardware-style MNIST MLP probe.
@@ -53,6 +54,35 @@ python -m unittest tests.test_pao tests.test_bpla_table_forms
 python experiments/pao_vs_bpla_primitive.py --num-samples 400000
 python experiments/nonlinear_primitive_figure.py --model vit --num-images 8
 python experiments/replacement_coverage.py --scopes multiplication --replace-lm-head --replace-conv2d
+```
+
+## W8A8 PTQ Baseline Comparison
+
+`modules/torch_ptq.py` adds post-training quantization to the same harness.
+PTQ, not PAO, is what a training-free method is normally measured against, so
+this is the comparison that decides whether B-PLA is competitive.
+
+Two recipes are reported as separate backends, because a single one would
+misrepresent the baseline:
+
+- `ptq-w8a8` uses dynamic **per-token** activation scales (ZeroQuant /
+  LLM.int8() style). This is the strong form and the primary baseline.
+- `ptq-w8a8-static` uses static **per-tensor** scales from percentile
+  calibration, the conventional recipe.
+
+Both use per-output-channel symmetric weight quantization and simulate int8
+arithmetic by quantize-dequantize with a float32 accumulator, which is the same
+accumulator every other backend uses. Calibration is forward-only over the same
+batches B-PLA gets. A model that was replaced but never calibrated raises rather
+than silently returning exact results.
+
+The W8A8 backends run at the `multiplication` scope only: W8A8 leaves GELU,
+Softmax and LayerNorm in floating point by convention, so it has no honest
+`nonlinear` or `combined` row, and the harness refuses those combinations.
+
+```bash
+python -m unittest tests.test_ptq
+bash run_ptq.sh          # matched 6-backend run, multiplication scope
 ```
 
 ## Table Construction and Replacement Scope

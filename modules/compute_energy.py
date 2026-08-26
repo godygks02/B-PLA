@@ -20,6 +20,15 @@ class ComputeEnergyTablePJ:
     fp32_mul: float = 3.70
     fp32_add: float = 0.90
     int32_add: float = 0.10
+    # Narrow-integer entries from the same 45 nm table. These are what a W8A8
+    # post-training-quantization baseline spends per weighted product: int8
+    # multiplication is 18.5x cheaper than fp32 multiplication but is still a
+    # multiplier array, which is the distinction B-PLA is making. Included so
+    # the cost comparison against PTQ uses one consistent source rather than
+    # mixing tables.
+    int8_mul: float = 0.20
+    int8_add: float = 0.03
+    int32_mul: float = 3.10
     fixed_shift: float = 0.0
     small_control: float = 0.005
     fp32_tanh: float = 0.0

@@ -55,10 +55,40 @@ from modules.torch_pao import (
     replace_pao_layer_norms,
     replace_pao_linear_and_gelu,
 )
+from modules.torch_ptq import (
+    TorchPTQConfig,
+    calibrate_ptq_model,
+    finalize_ptq_model,
+    replace_ptq_attention_matmuls,
+    replace_ptq_gpt2_conv1d,
+    replace_ptq_linear,
+)
 
+
+#: Row-chunk size for the comparison metrics, in elements. 32M float64 values
+#: is 256 MB per temporary, which keeps the whole comparison well under a
+#: gigabyte for any vocabulary size.
+_COMPARISON_CHUNK_ELEMENTS = 32_000_000
 
 SCOPES = ("multiplication", "nonlinear", "combined")
-BACKENDS = ("exact", "pao", "bpla-float", "bpla-dyadic")
+BACKENDS = ("exact", "ptq-w8a8", "ptq-w8a8-static", "pao", "bpla-float", "bpla-dyadic")
+
+#: The two W8A8 recipes, kept as separate backends so a single matched run can
+#: report both against the same reference. ``ptq-w8a8`` uses dynamic per-token
+#: activation scales, which is what ZeroQuant, LLM.int8() and SmoothQuant's O1
+#: setting all do and is the strong form of the baseline. ``ptq-w8a8-static``
+#: uses static per-tensor scales from percentile calibration, the conventional
+#: recipe. Reporting only the first would look like a straw man in reverse;
+#: reporting only the second would be the straw man.
+PTQ_GRANULARITY = {"ptq-w8a8": "token", "ptq-w8a8-static": "tensor"}
+
+#: W8A8 quantizes weights and activations and leaves the nonlinearities in
+#: floating point, which is the convention the published numbers are measured
+#: under. There is therefore no honest ``nonlinear`` or ``combined`` row to
+#: report for it; quantizing GELU and Softmax too is a separate research line
+#: (FQ-ViT, I-ViT) with its own baselines. Asking for one is refused rather than
+#: silently answered with a multiplication-scope run under another label.
+PTQ_SCOPES = ("multiplication",)
 
 
 def _bpla_config(args: argparse.Namespace, affine_path: str) -> TorchBPLAConfig:
@@ -104,6 +134,52 @@ def convert(
         "calibration_samples": 0,
     }
     if backend == "exact":
+        return record
+
+    if backend in PTQ_GRANULARITY:
+        if scope not in PTQ_SCOPES:
+            raise ValueError(
+                f"The {backend} backend has no {scope!r} scope: W8A8 leaves GELU, "
+                "Softmax and LayerNorm in floating point by construction. Run it "
+                "at the multiplication scope and compare there."
+            )
+        config = TorchPTQConfig(
+            weight_bits=args.ptq_weight_bits,
+            activation_bits=args.ptq_activation_bits,
+            per_channel_weights=args.ptq_per_channel_weights,
+            activation_percentile=args.ptq_percentile,
+            activation_granularity=PTQ_GRANULARITY[backend],
+        )
+        if is_gpt2:
+            record["linear_modules"] = replace_ptq_gpt2_conv1d(
+                model, config, replace_lm_head=args.replace_lm_head
+            )
+        else:
+            record["linear_modules"] = replace_ptq_linear(
+                model, config, replace_conv2d=args.replace_conv2d
+            )
+        record["attention_blocks"] = replace_ptq_attention_matmuls(model, config, mode="ptq-full")
+        start = time.perf_counter()
+        # Same batches, same count, same forward-only contract as the B-PLA
+        # calibration below, so neither method gets more data than the other.
+        calibrate_ptq_model(
+            model,
+            args.calibration_inputs,
+            lambda module, batch: module(**batch),
+            args.calibration_batches,
+        )
+        record["ptq_summary"] = {
+            **finalize_ptq_model(model),
+            "activation_granularity": config.activation_granularity,
+            "activation_percentile": (
+                config.activation_percentile if config.activation_granularity == "tensor" else None
+            ),
+            "per_channel_weights": config.per_channel_weights,
+            "weight_bits": config.weight_bits,
+            "activation_bits": config.activation_bits,
+        }
+        record["calibration_seconds"] = time.perf_counter() - start
+        record["calibration_samples"] = args.calibration_sample_count
         return record
 
     if backend == "pao":
@@ -341,28 +417,65 @@ def compare_to_reference(current: torch.Tensor, reference: torch.Tensor) -> dict
     comparison with work that quotes them.
     """
 
-    current = current.double()
-    reference = reference.double()
-    centered_current = current - current.mean(dim=-1, keepdim=True)
-    centered_reference = reference - reference.mean(dim=-1, keepdim=True)
-    centered_difference = centered_current - centered_reference
+    # Accumulated over row chunks rather than over whole float64 copies. Every
+    # metric here is a ratio of sums, so chunking changes nothing but the peak
+    # memory -- and that peak is what decides whether the run finishes: a
+    # language model's logits are tokens x vocabulary, so at 12,800 GPT-2 tokens
+    # one float64 copy is 5.1 GB and the original four-copy form needed roughly
+    # 20 GB to compare a run that had already completed its forward passes.
+    rows = current.shape[0]
+    chunk = max(1, min(rows, _COMPARISON_CHUNK_ELEMENTS // max(1, current.shape[-1])))
+
+    totals = dict.fromkeys(
+        (
+            "elements",
+            "abs_difference",
+            "squared_difference",
+            "squared_reference",
+            "cross",
+            "uncentered_abs_difference",
+            "uncentered_cross",
+            "uncentered_squared_reference",
+        ),
+        0.0,
+    )
+    agreements = 0
+
+    for start in range(0, rows, chunk):
+        current_chunk = current[start : start + chunk].double()
+        reference_chunk = reference[start : start + chunk].double()
+        centered_current = current_chunk - current_chunk.mean(dim=-1, keepdim=True)
+        centered_reference = reference_chunk - reference_chunk.mean(dim=-1, keepdim=True)
+        centered_difference = centered_current - centered_reference
+
+        totals["elements"] += float(current_chunk.numel())
+        totals["abs_difference"] += float(centered_difference.abs().sum())
+        totals["squared_difference"] += float(centered_difference.pow(2).sum())
+        totals["squared_reference"] += float(centered_reference.pow(2).sum())
+        totals["cross"] += float((centered_current * centered_reference).sum())
+        totals["uncentered_abs_difference"] += float((current_chunk - reference_chunk).abs().sum())
+        totals["uncentered_cross"] += float((current_chunk * reference_chunk).sum())
+        totals["uncentered_squared_reference"] += float(reference_chunk.pow(2).sum())
+        agreements += int(
+            (current_chunk.argmax(dim=-1) == reference_chunk.argmax(dim=-1)).sum()
+        )
+
+    elements = totals["elements"]
+    mean_squared_difference = totals["squared_difference"] / elements
+    mean_squared_reference = totals["squared_reference"] / elements
 
     return {
-        "logit_mae": float(centered_difference.abs().mean()),
-        "logit_rmse": float(centered_difference.pow(2).mean().sqrt()),
-        "logit_nrmse": float(
-            centered_difference.pow(2).mean().sqrt() / centered_reference.pow(2).mean().sqrt()
-        ),
-        "argmax_agreement": float(
-            (current.argmax(dim=-1) == reference.argmax(dim=-1)).float().mean() * 100.0
-        ),
+        "logit_mae": totals["abs_difference"] / elements,
+        "logit_rmse": math.sqrt(mean_squared_difference),
+        "logit_nrmse": math.sqrt(mean_squared_difference) / math.sqrt(mean_squared_reference),
+        "argmax_agreement": 100.0 * agreements / rows,
         # The model-level counterpart of the per-product gain: a systematic
         # contraction shows up here even when the argmax survives.
-        "output_gain": float(
-            (centered_current * centered_reference).sum() / centered_reference.pow(2).sum()
+        "output_gain": totals["cross"] / totals["squared_reference"],
+        "uncentered_logit_mae": totals["uncentered_abs_difference"] / elements,
+        "uncentered_output_gain": (
+            totals["uncentered_cross"] / totals["uncentered_squared_reference"]
         ),
-        "uncentered_logit_mae": float((current - reference).abs().mean()),
-        "uncentered_output_gain": float((current * reference).sum() / reference.pow(2).sum()),
     }
 
 
@@ -407,6 +520,21 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also convert ViT's patch-embedding convolution.",
     )
+    parser.add_argument("--ptq-weight-bits", type=int, default=8)
+    parser.add_argument("--ptq-activation-bits", type=int, default=8)
+    parser.add_argument(
+        "--ptq-percentile",
+        type=float,
+        default=99.99,
+        help="Activation clipping percentile for ptq-w8a8-static. 100 disables clipping. "
+             "Unused by ptq-w8a8, whose per-token scales are min-max over each row.",
+    )
+    parser.add_argument(
+        "--ptq-per-tensor-weights",
+        dest="ptq_per_channel_weights",
+        action="store_false",
+        help="Weaken PTQ to a single weight scale per tensor. Off: per-channel is standard.",
+    )
     parser.add_argument(
         "--pao-alpha",
         type=float,
@@ -448,6 +576,15 @@ def main() -> None:
             "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); "
             "verified in tests/test_pao.py against the Mogami int-addition trick.",
             "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+            "Both W8A8 backends use per-output-channel symmetric weight quantization, "
+            "simulated by quantize-dequantize with a float32 accumulator, which is the "
+            "same accumulator every other backend uses.",
+            "ptq-w8a8 uses dynamic per-token activation scales (ZeroQuant / LLM.int8() "
+            "style); ptq-w8a8-static uses static per-tensor scales from percentile "
+            "calibration. The static form is the conventional recipe and the dynamic "
+            "form is the stronger one; both are reported.",
+            "The W8A8 backends run at the multiplication scope only: W8A8 leaves the "
+            "nonlinear paths in floating point by convention.",
             "Wall-clock is not reported: neither backend has native hardware support.",
             "Logit metrics are row-centered: softmax ignores a per-row constant, and for "
             "GPT-2 that constant holds 99.95% of the raw logit energy.",
@@ -455,6 +592,16 @@ def main() -> None:
         "results": [],
     }
     results: list[dict[str, object]] = record["results"]  # type: ignore[assignment]
+
+    # Fail before the first checkpoint is downloaded rather than hours into a
+    # run: an unsupported combination costs the whole queue if it surfaces late.
+    if any(backend in PTQ_GRANULARITY for backend in args.backends):
+        unsupported = [scope for scope in args.scopes if scope not in PTQ_SCOPES]
+        if unsupported:
+            raise SystemExit(
+                f"The W8A8 backends have no {unsupported} scope; W8A8 leaves the nonlinear "
+                "paths in floating point. Run them with --scopes multiplication."
+            )
 
     for model_name in args.models:
         is_gpt2 = model_name == "gpt2"
