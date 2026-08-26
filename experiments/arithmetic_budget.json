@@ -1,0 +1,84 @@
+{
+  "notes": [
+    "Counts follow bpla_softmax_torch and bpla_layer_norm_torch operation by operation, so composition-internal multiplies are attributed to the multiplier rather than to the nonlinear path.",
+    "Shift-add costs assume the separable multiplier (2*T per product) and the one-dimensional tables (T per lookup).",
+    "Arithmetic counts only. Not an energy or area claim."
+  ],
+  "configuration": {
+    "gpt2_sequence_length": 256,
+    "vit_tokens": 197,
+    "multiplier_terms": 2,
+    "nonlinear_terms": 4,
+    "baseline_nonlinear_terms": 2,
+    "output": "C:\\Users\\cm120\\Project\\VLM_SNN_Research\\B_PLA\\experiments\\arithmetic_budget.json"
+  },
+  "models": [
+    {
+      "model": "GPT-2, 256 tokens",
+      "multiplication_invocations": 32865792512,
+      "nonlinear_invocations": 18954496,
+      "multiplications_per_nonlinear": 1733.9312272929863,
+      "multiplier_terms": 2,
+      "nonlinear_terms": 4,
+      "multiplication_shift_adds": 131463170048,
+      "nonlinear_shift_adds": 75817984,
+      "nonlinear_share_of_budget": 0.0005763917233539569,
+      "cost_of_raising_nonlinear_terms": 0.00028827894247520844,
+      "exact_multiplies_remaining": {
+        "log2(e) scaling (softmax)": 9437184
+      },
+      "breakdown": {
+        "multiplications": {
+          "qkv projection": 5435817984,
+          "attention output projection": 1811939328,
+          "mlp": 14495514624,
+          "output projection (lm_head)": 9880928256,
+          "attention QK^T": 603979776,
+          "attention PV": 603979776,
+          "softmax normalization": 18874368,
+          "layernorm": 14758400
+        },
+        "nonlinear": {
+          "GELU": 9437184,
+          "exp2 (softmax)": 9437184,
+          "reciprocal (softmax)": 73728,
+          "rsqrt (layernorm)": 6400
+        }
+      }
+    },
+    {
+      "model": "ViT-Base, 197 tokens",
+      "multiplication_invocations": 17586362266,
+      "nonlinear_invocations": 12912365,
+      "multiplications_per_nonlinear": 1361.9784033366468,
+      "multiplier_terms": 2,
+      "nonlinear_terms": 4,
+      "multiplication_shift_adds": 70345449064,
+      "nonlinear_shift_adds": 51649460,
+      "nonlinear_share_of_budget": 0.0007336873405711672,
+      "cost_of_raising_nonlinear_terms": 0.0003669782939498513,
+      "exact_multiplies_remaining": {
+        "log2(e) scaling (softmax)": 5588496
+      },
+      "breakdown": {
+        "multiplications": {
+          "patch embedding": 115605504,
+          "qkv projection": 4183031808,
+          "attention output projection": 1394343936,
+          "mlp": 11154751488,
+          "classifier": 768000,
+          "attention QK^T": 357663744,
+          "attention PV": 357663744,
+          "softmax normalization": 11176992,
+          "layernorm": 11357050
+        },
+        "nonlinear": {
+          "GELU": 7262208,
+          "exp2 (softmax)": 5588496,
+          "reciprocal (softmax)": 56736,
+          "rsqrt (layernorm)": 4925
+        }
+      }
+    }
+  ]
+}
