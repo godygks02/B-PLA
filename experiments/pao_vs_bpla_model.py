@@ -71,7 +71,22 @@ from modules.torch_ptq import (
 _COMPARISON_CHUNK_ELEMENTS = 32_000_000
 
 SCOPES = ("multiplication", "nonlinear", "combined")
-BACKENDS = ("exact", "ptq-w8a8", "ptq-w8a8-static", "pao", "bpla-float", "bpla-dyadic")
+BACKENDS = (
+    "exact",
+    "ptq-w8a8",
+    "ptq-w8a8-static",
+    "pao",
+    "pao-alpha",
+    "bpla-float",
+    "bpla-dyadic",
+)
+
+#: PAM and its single-constant error compensation are separate backends so one
+#: matched run can carry both. The correction is cheap but not free -- it is a
+#: second piecewise affine multiply, so it doubles PAM's integer additions --
+#: and a table that showed only one of the two would either understate the
+#: baseline or hide what the correction costs.
+PAO_BACKENDS = {"pao", "pao-alpha"}
 
 #: The two W8A8 recipes, kept as separate backends so a single matched run can
 #: report both against the same reference. ``ptq-w8a8`` uses dynamic per-token
@@ -182,8 +197,11 @@ def convert(
         record["calibration_samples"] = args.calibration_sample_count
         return record
 
-    if backend == "pao":
-        config = TorchPAOConfig(matmul_chunk_out=args.linear_chunk_out, alpha=args.pao_alpha)
+    if backend in PAO_BACKENDS:
+        config = TorchPAOConfig(
+            matmul_chunk_out=args.linear_chunk_out,
+            alpha=args.pao_alpha if backend == "pao-alpha" else None,
+        )
         if is_gpt2:
             record["linear_modules"] = replace_pao_gpt2_conv1d_and_gelu(
                 model,
@@ -538,8 +556,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pao-alpha",
         type=float,
-        default=None,
-        help="Optional PAO error-compensation constant (Sec. 2.7). Off by default, as in the paper.",
+        default=1.056,
+        help="PAO error-compensation constant (Sec. 2.7), used by the pao-alpha backend. "
+             "The plain pao backend never applies it, as in the paper.",
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(

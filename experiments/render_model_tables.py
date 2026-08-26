@@ -23,6 +23,7 @@ BACKEND_LABEL = {
     "ptq-w8a8": "W8A8 PTQ (per-token)",
     "ptq-w8a8-static": "W8A8 PTQ (per-tensor)",
     "pao": r"\pam{}",
+    "pao-alpha": r"\pam{}$+lpha$",
     "bpla-float": r"\bpla{} float",
     "bpla-dyadic": r"\bpla{} dyadic",
 }
@@ -31,6 +32,7 @@ BACKEND_PLAIN = {
     "ptq-w8a8": "W8A8 PTQ (per-token)",
     "ptq-w8a8-static": "W8A8 PTQ (per-tensor)",
     "pao": "PAM",
+    "pao-alpha": "PAM+alpha",
     "bpla-float": "B-PLA float",
     "bpla-dyadic": "B-PLA dyadic",
 }
@@ -52,7 +54,9 @@ def _scope_note(record: dict) -> str:
         parts.append("patch embedding converted")
     if config.get("replace_layernorm"):
         parts.append("LayerNorm converted")
-    if config.get("pao_alpha"):
+    # The constant now has a default, so its presence in the configuration no
+    # longer means it was applied -- only the pao-alpha backend applies it.
+    if "pao-alpha" in config.get("backends", []):
         parts.append(f"PAM alpha={config['pao_alpha']}")
     return "; ".join(parts)
 
