@@ -312,13 +312,25 @@ def _bpla_multiply_impl(
         coeff_c = lut["coeff_c"][idx_a, idx_b]
         cross = coeff_a * frac_a + coeff_b * frac_b + coeff_c
 
+    # A zero mantissa means a power of two, where the interaction term is
+    # exactly zero and the tile plane should not be consulted at all: its
+    # residual would inject error into a product that is otherwise exact.
+    # Detecting it costs one zero-comparator per operand and gives B-PLA the
+    # same exactness on powers of two that Mitchell-family multiplication has.
+    cross = torch.where((frac_a == 0) | (frac_b == 0), torch.zeros_like(cross), cross)
+
     mantissa = 1.0 + frac_a + frac_b + cross
     overflow = mantissa >= 2.0
     mantissa = torch.where(overflow, mantissa * 0.5, mantissa)
     exponent = exp_a + exp_b + overflow.to(exp_a.dtype)
     magnitude = torch.ldexp(mantissa, exponent)
     signed = torch.where(sign_a ^ sign_b, -magnitude, magnitude)
-    return torch.where((a != 0) & (b != 0), signed, torch.zeros_like(signed))
+    result = torch.where((a != 0) & (b != 0), signed, torch.zeros_like(signed))
+
+    # NaN and infinity cannot go through the mantissa path; deferring to exact
+    # IEEE semantics reproduces their propagation, as the PAO baseline does.
+    special = ~(torch.isfinite(a) & torch.isfinite(b))
+    return torch.where(special, a * b, result)
 
 
 def bpla_linear_torch(
@@ -540,7 +552,13 @@ def bpla_softmax_torch(
     safe = torch.where(finite_row, work, torch.zeros_like(work))
     shifted = safe - safe.max(dim=dim, keepdim=True).values
 
-    base2 = shifted * 1.4426950408889634
+    # log2(e) is an ordinary constant, so this is an ordinary multiplication and
+    # goes through the B-PLA multiplier like every other one. Leaving it exact
+    # would put a float multiply per Softmax element back into a path the method
+    # claims to remove.
+    base2 = bpla_multiply_torch(
+        shifted, torch.full_like(shifted, 1.4426950408889634), config, shared
+    )
     integer = torch.floor(base2)
     fraction = base2 - integer
     fractional_exp = _functional_bpla(fraction, "exp2_fraction", config, shared)
@@ -657,7 +675,19 @@ def replace_attention_matmuls(
             attention_scores = bpla_matmul_torch(query, key.transpose(-1, -2), config, tables)
         else:
             attention_scores = torch.matmul(query, key.transpose(-1, -2))
-        attention_scores = attention_scores * scaling
+        # The 1/sqrt(head_dim) scaling is a multiplication too. It happens to be
+        # a power of two for the models here, which the multiplier now handles
+        # exactly, but that is a property of head_dim=64 rather than of the
+        # method, so it is routed rather than assumed away.
+        if use_bpla_qk:
+            attention_scores = bpla_multiply_torch(
+                attention_scores,
+                torch.full_like(attention_scores, scaling),
+                config,
+                tables,
+            )
+        else:
+            attention_scores = attention_scores * scaling
 
         attention_weights = attention_scores
         if attention_mask is not None:

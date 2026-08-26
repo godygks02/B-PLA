@@ -15,18 +15,16 @@
   "models": [
     {
       "model": "GPT-2, 256 tokens",
-      "multiplication_invocations": 32865792512,
+      "multiplication_invocations": 32884666880,
       "nonlinear_invocations": 18954496,
-      "multiplications_per_nonlinear": 1733.9312272929863,
+      "multiplications_per_nonlinear": 1734.9269999054577,
       "multiplier_terms": 2,
       "nonlinear_terms": 4,
-      "multiplication_shift_adds": 131463170048,
+      "multiplication_shift_adds": 131538667520,
       "nonlinear_shift_adds": 75817984,
-      "nonlinear_share_of_budget": 0.0005763917233539569,
-      "cost_of_raising_nonlinear_terms": 0.00028827894247520844,
-      "exact_multiplies_remaining": {
-        "log2(e) scaling (softmax)": 9437184
-      },
+      "nonlinear_share_of_budget": 0.0005760610901578593,
+      "cost_of_raising_nonlinear_terms": 0.00028811353057618607,
+      "exact_multiplies_remaining": {},
       "breakdown": {
         "multiplications": {
           "qkv projection": 5435817984,
@@ -36,7 +34,9 @@
           "attention QK^T": 603979776,
           "attention PV": 603979776,
           "softmax normalization": 18874368,
-          "layernorm": 14758400
+          "layernorm": 14758400,
+          "log2(e) scaling (softmax)": 9437184,
+          "attention scaling": 9437184
         },
         "nonlinear": {
           "GELU": 9437184,
@@ -48,18 +48,16 @@
     },
     {
       "model": "ViT-Base, 197 tokens",
-      "multiplication_invocations": 17586362266,
+      "multiplication_invocations": 17597539258,
       "nonlinear_invocations": 12912365,
-      "multiplications_per_nonlinear": 1361.9784033366468,
+      "multiplications_per_nonlinear": 1362.8440071203067,
       "multiplier_terms": 2,
       "nonlinear_terms": 4,
-      "multiplication_shift_adds": 70345449064,
+      "multiplication_shift_adds": 70390157032,
       "nonlinear_shift_adds": 51649460,
-      "nonlinear_share_of_budget": 0.0007336873405711672,
-      "cost_of_raising_nonlinear_terms": 0.0003669782939498513,
-      "exact_multiplies_remaining": {
-        "log2(e) scaling (softmax)": 5588496
-      },
+      "nonlinear_share_of_budget": 0.00073322168428298,
+      "cost_of_raising_nonlinear_terms": 0.0003667452949429205,
+      "exact_multiplies_remaining": {},
       "breakdown": {
         "multiplications": {
           "patch embedding": 115605504,
@@ -70,7 +68,9 @@
           "attention QK^T": 357663744,
           "attention PV": 357663744,
           "softmax normalization": 11176992,
-          "layernorm": 11357050
+          "layernorm": 11357050,
+          "log2(e) scaling (softmax)": 5588496,
+          "attention scaling": 5588496
         },
         "nonlinear": {
           "GELU": 7262208,

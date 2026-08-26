@@ -615,7 +615,15 @@ def replace_pao_attention_matmuls(
             attention_scores = pao_matmul_torch(query, key.transpose(-1, -2), config)
         else:
             attention_scores = torch.matmul(query, key.transpose(-1, -2))
-        attention_scores = attention_scores * scaling
+        # Same reasoning as the B-PLA path: the 1/sqrt(head_dim) scaling is a
+        # multiplication and goes through PAM, which is exact for the
+        # power-of-two case anyway.
+        if use_qk:
+            attention_scores = pao_multiply_torch(
+                attention_scores, torch.full_like(attention_scores, scaling), config
+            )
+        else:
+            attention_scores = attention_scores * scaling
 
         attention_weights = attention_scores
         if attention_mask is not None:

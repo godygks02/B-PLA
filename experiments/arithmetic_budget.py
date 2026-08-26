@@ -32,7 +32,10 @@ class Counts:
     """Invocations of each replaceable primitive, per input sequence.
 
     ``exact_remaining`` holds float multiplies that survive even at full
-    conversion, so the report cannot quietly imply there are none.
+    conversion, so the report cannot quietly imply there are none. It is empty
+    now that the Softmax and attention scalings are routed through the
+    multiplier; what remains outside it is addition, which the method never
+    claimed to replace.
     """
 
     multiplications: dict[str, int] = field(default_factory=dict)
@@ -77,12 +80,12 @@ def gpt2_counts(layers: int, hidden: int, heads: int, ffn: int, seq: int, vocab:
     counts.nonlinear["reciprocal (softmax)"] = 2 * softmax_rows
     counts.nonlinear["rsqrt (layernorm)"] = norm_rows
 
-    # bpla_softmax_torch scales by log2(e) with an exact float multiply before
-    # splitting into integer and fractional parts. It is not routed through the
-    # B-PLA multiplier, so it is a real remaining exact multiply.
-    counts.exact_remaining["log2(e) scaling (softmax)"] = layers * heads * seq * seq
-    # The 1/sqrt(head_dim) attention scaling is exact too, but for head_dim=64
-    # it is 2^-3 -- an exponent decrement, not a multiply. Recorded as free.
+    # Both of these go through the multiplier: the log2(e) scaling inside
+    # Softmax, and the 1/sqrt(head_dim) attention scaling. The latter is a power
+    # of two for these models and the multiplier is exact there, but it is
+    # routed rather than assumed away because that is a property of head_dim.
+    counts.multiplications["log2(e) scaling (softmax)"] = layers * heads * seq * seq
+    counts.multiplications["attention scaling"] = layers * heads * seq * seq
     return counts
 
 
@@ -111,12 +114,12 @@ def vit_counts(layers: int, hidden: int, heads: int, ffn: int, tokens: int, clas
     counts.nonlinear["reciprocal (softmax)"] = 2 * softmax_rows
     counts.nonlinear["rsqrt (layernorm)"] = norm_rows
 
-    # bpla_softmax_torch scales by log2(e) with an exact float multiply before
-    # splitting into integer and fractional parts. It is not routed through the
-    # B-PLA multiplier, so it is a real remaining exact multiply.
-    counts.exact_remaining["log2(e) scaling (softmax)"] = layers * heads * tokens * tokens
-    # The 1/sqrt(head_dim) attention scaling is exact too, but for head_dim=64
-    # it is 2^-3 -- an exponent decrement, not a multiply. Recorded as free.
+    # Both of these go through the multiplier: the log2(e) scaling inside
+    # Softmax, and the 1/sqrt(head_dim) attention scaling. The latter is a power
+    # of two for these models and the multiplier is exact there, but it is
+    # routed rather than assumed away because that is a property of head_dim.
+    counts.multiplications["log2(e) scaling (softmax)"] = layers * heads * tokens * tokens
+    counts.multiplications["attention scaling"] = layers * heads * tokens * tokens
     return counts
 
 
@@ -143,6 +146,10 @@ def report(name: str, counts: Counts, mult_terms: int, nonlinear_terms: int, bas
     print(f"  nonlinear share of all invocations       : {100*nl_ops/(mult_ops+nl_ops):.4f}%")
     print()
     exact_left = sum(counts.exact_remaining.values())
+    if not exact_left:
+        print("  exact float multiplies still present         : none")
+        print("  (accumulation stays exact addition; B-PLA replaces multiplies)")
+        print()
     if exact_left:
         print("  exact float multiplies still present (not converted):")
         for label, value in counts.exact_remaining.items():

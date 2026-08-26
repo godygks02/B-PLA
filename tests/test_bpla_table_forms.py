@@ -113,6 +113,47 @@ class SeparableMultiplierTests(unittest.TestCase):
             self.assertLess(worst, pam, msg=f"T={terms}: {worst:.4f} vs PAM {pam:.4f}")
 
 
+class MultiplierExactnessTests(unittest.TestCase):
+    """Properties the multiplier must hold for the no-exact-multiply claim."""
+
+    def test_exact_when_either_operand_is_a_power_of_two(self):
+        """A zero mantissa means the interaction term is exactly zero.
+
+        Consulting the tile plane there injects its residual into a product that
+        should be exact, and would make routing a power-of-two scaling through
+        the multiplier worse than leaving it as a float multiply.
+        """
+
+        config = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+        powers = torch.tensor([0.125, 0.25, 1.0, 2.0, 8.0, -0.5])
+        others = torch.tensor([1.5, -2.25, 7.0, 0.03125, -1000.0, 3.7])
+        torch.testing.assert_close(
+            bpla_multiply_torch(others, powers, config), others * powers, rtol=0, atol=0
+        )
+        torch.testing.assert_close(
+            bpla_multiply_torch(powers, others, config), powers * others, rtol=0, atol=0
+        )
+
+    def test_propagates_infinities_and_nan(self):
+        config = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+        a = torch.tensor([float("-inf"), float("inf"), float("nan"), 2.0])
+        b = torch.tensor([2.0, 2.0, 2.0, float("nan")])
+        got = bpla_multiply_torch(a, b, config)
+        self.assertTrue(bool(torch.isneginf(got[0])))
+        self.assertTrue(bool(torch.isposinf(got[1])))
+        self.assertTrue(bool(got[2].isnan()))
+        self.assertTrue(bool(got[3].isnan()))
+
+    def test_the_zero_mantissa_shortcut_does_not_cost_general_accuracy(self):
+        generator = torch.Generator().manual_seed(0)
+        a = torch.randn(200000, generator=generator)
+        b = torch.randn(200000, generator=generator) * 0.02
+        exact = a.double() * b.double()
+        config = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+        error = float((bpla_multiply_torch(a, b, config).double() - exact).abs().mean())
+        self.assertLess(error, 5e-6)
+
+
 class AnchorSelectionTests(unittest.TestCase):
     DOMAINS = {
         "exp2_fraction": (lambda g: torch.rand(200000, generator=g), torch.exp2),
