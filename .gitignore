@@ -27,3 +27,7 @@ B_PLA_vault/
 .env
 .DS_Store
 Thumbs.db
+
+# Generated paper figures are build products of the scripts beside them, not
+# reference PDFs; the blanket *.pdf rule above is aimed at the latter.
+!experiments/fig_*.pdf

@@ -1,185 +1,328 @@
-"""
-What piecewise linear approximation is, and what B-PLA does with it.
+"""Render the two-panel PLA concept figure used in the Introduction.
 
-The introduction states the idea in one equation; this figure is what makes that
-equation concrete before the reader reaches the method. Both panels are produced
-by the shipped implementation rather than drawn by hand, so what the figure shows
-is what the code computes.
+Panel (a) compares exact GELU with a deliberately coarse piecewise-affine fit,
+plus an inset of the residual so the per-segment structure is unambiguous. Four
+segments are used rather than a realistic count because the figure has to show
+*how* the approximation is built: B-PLA's own GELU table places 227 segments and
+its curve lies on the function, so plotting it would show nothing.
 
-Left -- the idea on a nonlinear operator
-----------------------------------------
-GELU, a deliberately coarse six-segment least-squares fit that shows what
-Equation (1) does, and B-PLA's own approximation. The coarse fit is there
-because B-PLA's is invisible: at k=4 it places 227 segments and lies on the
-function, so a plot of it alone would say nothing about how it is built. The
-contrast is the point -- the same construction, at a resolution the routing
-makes free. B-PLA's segments are delimited by floating-point exponent and
-mantissa-prefix boundaries rather than by stored breakpoints, so no comparator
-chain selects them.
+Panel (b) shows the exact mantissa-interaction surface ``m1*m2`` as a smooth
+surface coloured by height, with the B-PLA tile-centre affine approximation
+overlaid as 4x4 prefix-routed planes. The planes meet the surface along each
+tile's centre lines, which is why the residual is exactly
+``(m1 - mu_i)(m2 - nu_j)`` and is bounded by ``2^-(2k+2)``.
 
-Right -- the same idea applied to multiplication
-------------------------------------------------
-The residual of the tile-wise planar fit to the mantissa interaction term
-m1*m2. Fitting each tile at its centre makes the residual exactly
-(m1-mu_i)(m2-nu_j), which vanishes along both centre lines and is bounded by
-2^-(2k+2) -- the bright grid is that structure, not noise. Mitchell-family
-multiplication is the special case that discards m1*m2 entirely; its error over
-the same square would be the whole surface, up to 0.25, which the shared colour
-scale would render uniformly saturated.
+The default 7.2-inch width is suitable for a two-column paper figure. The
+script writes a vector PDF, an editable SVG, and a 600-dpi PNG preview.
 
 Usage
 -----
     python experiments/pla_concept_figure.py
+    python experiments/pla_concept_figure.py --prefix-bits 3
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
+import math
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import numpy as np
-import torch
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from modules.torch_bpla import (
-    SharedBPLATables,
-    TorchBPLAConfig,
-    activation_prefix_index_torch,
-    bpla_activation_torch,
-)
-
-COLOR_EXACT = "#333333"
-COLOR_BPLA = "#1f77b4"
 
 
-def _segment_edges(x: torch.Tensor, index: torch.Tensor) -> list[float]:
-    """Points where the router's segment index changes, read off the router."""
+# Okabe--Ito-compatible colours, with charcoal reserved for exact quantities.
+COLOR_EXACT = "#262626"
+COLOR_APPROX = "#0072B2"
+COLOR_TILE = "#D55E00"
+COLOR_BOUNDARY = "#B8B8B8"
+HEIGHT_CMAP = "viridis"
 
-    changes = (index[1:] != index[:-1]).nonzero().flatten()
-    return [float(x[i + 1]) for i in changes.tolist()]
 
+def gelu(x: np.ndarray) -> np.ndarray:
+    """Exact GELU, x * Phi(x), without requiring SciPy."""
 
-def render(output: Path, prefix_bits: int, terms: int) -> Path:
-    figure, (left, right) = plt.subplots(1, 2, figsize=(7.4, 3.1))
-
-    # ------------------------------------------------------------------ left
-    x = torch.linspace(-4.0, 4.0, 4001)
-    exact = torch.nn.functional.gelu(x, approximate="tanh")
-
-    # A genuine least-squares piecewise fit at a resolution the eye can resolve.
-    # This is the idea of Equation (1), not B-PLA's router: B-PLA already places
-    # 227 segments at k=4, and at that density -- or even at k=1, where the
-    # exponent bins alone give 31 -- the approximation lies on the function and
-    # a plot of it would show nothing about how it is built.
-    breaks = torch.tensor([-4.0, -2.0, -1.0, -0.25, 0.5, 1.5, 4.0])
-    coarse = torch.empty_like(exact)
-    for lo, hi in zip(breaks[:-1], breaks[1:]):
-        mask = (x >= lo) & (x <= hi)
-        xs, ys = x[mask], exact[mask]
-        design = torch.stack([xs, torch.ones_like(xs)], dim=1)
-        slope, offset = torch.linalg.lstsq(design, ys.unsqueeze(1)).solution.flatten()
-        coarse[mask] = slope * xs + offset
-
-    config = TorchBPLAConfig(
-        prefix_bits=prefix_bits, affine_path="dyadic", dyadic_terms=terms,
-        nonlinear_dyadic_terms=4, activation_range=4.0,
+    erf = np.fromiter(
+        (math.erf(float(value) / math.sqrt(2.0)) for value in x),
+        dtype=float,
+        count=x.size,
     )
-    table = SharedBPLATables(config).activation("gelu", x.device, x.dtype)
-    approximate = bpla_activation_torch(x, table, config)
-    index = activation_prefix_index_torch(
-        x, config, int(table["min_e_routing"]), int(table["max_e_routing"])
-    )
-    edges = _segment_edges(x, index)
+    return 0.5 * x * (1.0 + erf)
 
-    for edge in breaks[1:-1]:
-        left.axvline(float(edge), color="0.8", linewidth=0.8, linestyle=":", zorder=0)
-    left.plot(x, exact, color=COLOR_EXACT, linewidth=2.4, label="GELU", zorder=2)
-    left.plot(x, coarse, color="#d62728", linewidth=1.5, zorder=3,
-              label="the idea: 6 affine segments")
-    left.set_xlim(-3.0, 2.0)
-    left.set_ylim(-0.55, 2.15)
-    left.plot(x, approximate, color=COLOR_BPLA, linewidth=1.5, linestyle="--", zorder=4,
-              label=f"B-PLA, $k$={prefix_bits} ({len(edges) + 1} segments)")
-    left.scatter(breaks[1:-1], torch.nn.functional.gelu(breaks[1:-1], approximate="tanh"),
-                 s=18, color="#d62728", zorder=5)
-    left.set_xlabel("$x$")
-    left.set_ylabel("$f(x)$")
-    left.set_title("A nonlinear operator, segment by segment", fontsize=9)
-    left.grid(alpha=0.2)
-    left.legend(fontsize=6.8, loc="upper left", frameon=False)
-    left.annotate(
-        "B-PLA's curve is hidden under the function: max error "
-        f"{float((approximate - exact).abs().max()):.0e}",
-        xy=(0.5, 0.02), xycoords="axes fraction", ha="center", va="bottom",
-        fontsize=6.6, color="0.35",
+
+def fit_piecewise_affine(
+    x: np.ndarray, y: np.ndarray, breakpoints: np.ndarray
+) -> tuple[np.ndarray, list[tuple[np.ndarray, np.ndarray]]]:
+    """Fit one least-squares affine function independently on every segment."""
+
+    approximate = np.empty_like(y)
+    pieces: list[tuple[np.ndarray, np.ndarray]] = []
+    for segment, (lo, hi) in enumerate(zip(breakpoints[:-1], breakpoints[1:])):
+        # Make the half-open assignment explicit so every sample has one route.
+        mask = (x >= lo) & (x < hi)
+        if segment == len(breakpoints) - 2:
+            mask = (x >= lo) & (x <= hi)
+        xs, ys = x[mask], y[mask]
+        slope, offset = np.polyfit(xs, ys, deg=1)
+        fitted = slope * xs + offset
+        approximate[mask] = fitted
+        pieces.append((xs, fitted))
+    return approximate, pieces
+
+
+def configure_matplotlib() -> None:
+    """Use compact typography that remains legible after paper scaling."""
+
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["DejaVu Serif"],
+            "mathtext.fontset": "dejavuserif",
+            "font.size": 8.5,
+            "axes.titlesize": 9.2,
+            "axes.labelsize": 9.0,
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
+            "legend.fontsize": 7.4,
+            "axes.linewidth": 0.8,
+            "xtick.major.width": 0.8,
+            "ytick.major.width": 0.8,
+            "xtick.major.size": 3.2,
+            "ytick.major.size": 3.2,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+        }
     )
 
-    # ----------------------------------------------------------------- right
-    # The residual of the tile-centre planar fit, computed the way the
-    # multiplier computes it: (m1 - mu_i)(m2 - nu_j).
+
+def draw_gelu_panel(axis: plt.Axes) -> float:
+    """Draw exact GELU against a coarse PLA whose segments are visible."""
+
+    x = np.linspace(-3.0, 3.0, 2401)
+    exact = gelu(x)
+    # Four segments, not a realistic count. At any density B-PLA actually uses,
+    # the approximation lies on the function and the construction disappears.
+    breakpoints = np.array([-3.0, -1.2, 0.0, 1.2, 3.0])
+    approximate, pieces = fit_piecewise_affine(x, exact, breakpoints)
+
+    for boundary in breakpoints[1:-1]:
+        axis.axvline(
+            boundary,
+            color=COLOR_BOUNDARY,
+            linewidth=0.7,
+            linestyle=(0, (1.5, 2.2)),
+            zorder=0,
+        )
+
+    axis.plot(x, exact, color=COLOR_EXACT, linewidth=2.0, label="Exact GELU", zorder=2)
+    # Each piece is drawn on its own: two independently fitted segments are not
+    # continuous at the boundary, and pretending otherwise would misdraw the
+    # method.
+    for index, (xs, fitted) in enumerate(pieces):
+        axis.plot(
+            xs,
+            fitted,
+            color=COLOR_APPROX,
+            linewidth=1.8,
+            label="Piecewise-affine fit" if index == 0 else None,
+            zorder=3,
+        )
+        axis.plot(
+            [xs[0], xs[-1]],
+            [fitted[0], fitted[-1]],
+            linestyle="none",
+            marker="o",
+            markersize=3.2,
+            markerfacecolor="white",
+            markeredgecolor=COLOR_APPROX,
+            markeredgewidth=1.0,
+            zorder=4,
+        )
+
+    axis.axhline(0.0, color="#777777", linewidth=0.55, zorder=0)
+    axis.set(xlim=(-3.0, 3.0), ylim=(-0.62, 3.15), xlabel=r"Input $x$", ylabel="Output")
+    axis.set_xticks(np.arange(-3, 4, 1))
+    axis.set_yticks(np.arange(-0.5, 3.1, 0.5))
+    axis.grid(True, color="#E5E5E5", linewidth=0.55)
+    axis.set_axisbelow(True)
+    axis.legend(loc="lower right", frameon=False, handlelength=2.2)
+    axis.set_title("(a) A nonlinear operator", pad=7, fontweight="bold")
+
+    # The residual makes the segmentation unambiguous: it returns toward zero
+    # inside every segment and jumps at the boundaries.
+    # Upper-left is the one region the curve never enters.
+    inset = axis.inset_axes((0.075, 0.60, 0.40, 0.30))
+    inset.plot(x, approximate - exact, color=COLOR_APPROX, linewidth=0.9)
+    inset.axhline(0.0, color="#777777", linewidth=0.5)
+    for boundary in breakpoints[1:-1]:
+        inset.axvline(boundary, color=COLOR_BOUNDARY, linewidth=0.6,
+                      linestyle=(0, (1.5, 2.2)))
+    inset.set_xlim(-3.0, 3.0)
+    inset.set_xticks([])
+    inset.tick_params(axis="y", labelsize=5.6, pad=1.2, length=2.0)
+    inset.set_title("residual", fontsize=6.0, pad=2.0)
+    for spine in inset.spines.values():
+        spine.set_linewidth(0.6)
+
+    return float(np.max(np.abs(approximate - exact)))
+
+
+def draw_mantissa_panel(axis: plt.Axes, prefix_bits: int):
+    """Draw m1*m2 as a height-coloured surface under its prefix-tiled planes."""
+
     segments = 1 << prefix_bits
-    grid = np.linspace(0.0, 1.0, 512, endpoint=False)
-    m1, m2 = np.meshgrid(grid, grid, indexing="ij")
-    centres = (np.arange(segments) + 0.5) / segments
-    mu = centres[np.clip((m1 * segments).astype(int), 0, segments - 1)]
-    nu = centres[np.clip((m2 * segments).astype(int), 0, segments - 1)]
-    residual = np.abs((m1 - mu) * (m2 - nu))
+    width = 1.0 / segments
+    centres = (np.arange(segments) + 0.5) * width
 
-    image = right.imshow(
-        residual.T, origin="lower", extent=(0, 1, 0, 1), cmap="magma",
-        vmin=0.0, vmax=2.0 ** -(2 * prefix_bits + 2), aspect="equal",
-    )
-    for position in np.arange(1, segments) / segments:
-        right.axvline(position, color="white", linewidth=0.25, alpha=0.4)
-        right.axhline(position, color="white", linewidth=0.25, alpha=0.4)
-    right.set_xlabel("$m_1$")
-    right.set_ylabel("$m_2$")
-    right.set_title("The term a multiplier has to approximate", fontsize=9)
-    bar = figure.colorbar(image, ax=right, fraction=0.046, pad=0.03)
-    bar.set_label(r"$|\,m_1m_2 - \widehat{m_1m_2}\,|$", fontsize=7.5)
-    bar.ax.tick_params(labelsize=6.5)
-    right.annotate(
-        f"residual $=(m_1-\\mu_i)(m_2-\\nu_j)$,\nbounded by $2^{{-{2 * prefix_bits + 2}}}$",
-        xy=(0.04, 0.93), xycoords="axes fraction", ha="left", va="top",
-        fontsize=6.8, color="white",
+    # Exact surface, coloured by height. Kept opaque so the gradient reads; the
+    # planes above it are translucent instead.
+    grid = np.linspace(0.0, 1.0, 121)
+    m_1, m_2 = np.meshgrid(grid, grid, indexing="xy")
+    exact = m_1 * m_2
+    surface = axis.plot_surface(
+        m_1,
+        m_2,
+        exact,
+        cmap=HEIGHT_CMAP,
+        vmin=0.0,
+        vmax=1.0,
+        linewidth=0.0,
+        antialiased=True,
+        rstride=1,
+        cstride=1,
+        shade=False,
+        alpha=0.92,
+        zorder=1,
     )
 
-    figure.suptitle(
-        "Piecewise linear approximation, routed by the floating-point fields",
-        fontsize=9.5,
+    # The planes are drawn as outlines, not filled patches. At k=2 a plane and
+    # the surface differ by at most 2^-6, so a filled patch is depth-sorted
+    # arbitrarily against the surface and disappears under it; the edges of each
+    # tile show the faceting without competing for the same pixels.
+    for i, mu_i in enumerate(centres):
+        for j, nu_j in enumerate(centres):
+            lo_1, hi_1 = i * width, (i + 1) * width
+            lo_2, hi_2 = j * width, (j + 1) * width
+            corners_1 = [lo_1, hi_1, hi_1, lo_1, lo_1]
+            corners_2 = [lo_2, lo_2, hi_2, hi_2, lo_2]
+            heights = [
+                nu_j * c1 + mu_i * c2 - mu_i * nu_j
+                for c1, c2 in zip(corners_1, corners_2)
+            ]
+            axis.plot(
+                corners_1,
+                corners_2,
+                heights,
+                color=COLOR_TILE,
+                linewidth=0.95,
+                solid_capstyle="round",
+                zorder=6,
+            )
+
+    ticks = np.array([0.0, 0.5, 1.0])
+    axis.set(
+        xlim=(0.0, 1.0),
+        ylim=(0.0, 1.0),
+        zlim=(0.0, 1.02),
+        xlabel=r"$m_1$",
+        ylabel=r"$m_2$",
+        zlabel=r"$m_1m_2$",
     )
-    figure.tight_layout(rect=(0, 0, 1, 0.93))
-    figure.savefig(output, dpi=200, bbox_inches="tight")
+    axis.set_xticks(ticks)
+    axis.set_yticks(ticks)
+    axis.set_zticks(ticks)
+    axis.tick_params(pad=4.0)
+    axis.xaxis.labelpad = 1
+    axis.yaxis.labelpad = 1
+    axis.zaxis.labelpad = 1
+    axis.view_init(elev=25, azim=-127)
+    axis.set_box_aspect((1.0, 1.0, 0.70))
+    axis.set_title(
+        rf"(b) The mantissa product, tiled ($k={prefix_bits}$)",
+        pad=7,
+        fontweight="bold",
+    )
+
+    legend_handles = [
+        Patch(facecolor=plt.get_cmap(HEIGHT_CMAP)(0.55), edgecolor="none",
+              label=r"Exact $m_1m_2$"),
+        Patch(
+            facecolor=COLOR_TILE,
+            alpha=0.45,
+            edgecolor=COLOR_TILE,
+            label=rf"${segments}\!\times\!{segments}$ prefix planes",
+        ),
+    ]
+    axis.legend(
+        handles=legend_handles,
+        loc="upper left",
+        bbox_to_anchor=(-0.02, 0.97),
+        frameon=False,
+        borderaxespad=0.0,
+        handlelength=1.5,
+    )
+    return surface, 2.0 ** (-2 * prefix_bits - 2)
+
+
+def render(output_stem: Path, prefix_bits: int) -> list[Path]:
+    """Render the figure and return the three generated artifact paths."""
+
+    if prefix_bits < 1 or prefix_bits > 4:
+        raise ValueError("prefix_bits must be between 1 and 4 for a legible concept figure")
+
+    configure_matplotlib()
+    figure = plt.figure(figsize=(7.2, 3.05), constrained_layout=False)
+    grid = figure.add_gridspec(1, 2, width_ratios=(1.0, 1.16), wspace=0.20)
+    left = figure.add_subplot(grid[0, 0])
+    right = figure.add_subplot(grid[0, 1], projection="3d")
+
+    gelu_error = draw_gelu_panel(left)
+    surface, residual_bound = draw_mantissa_panel(right, prefix_bits)
+    figure.subplots_adjust(left=0.075, right=0.93, bottom=0.16, top=0.89)
+
+    bar = figure.colorbar(surface, ax=right, shrink=0.52, aspect=13, pad=0.02)
+    bar.set_label("height", fontsize=7.0, labelpad=2)
+    bar.set_ticks([0.0, 0.5, 1.0])
+    bar.ax.tick_params(labelsize=6.4, length=2.0)
+    bar.outline.set_linewidth(0.6)
+
+    output_stem = output_stem.with_suffix("")
+    output_stem.parent.mkdir(parents=True, exist_ok=True)
+    outputs = [output_stem.with_suffix(suffix) for suffix in (".pdf", ".svg", ".png")]
+    figure.savefig(outputs[0], bbox_inches="tight", pad_inches=0.025)
+    figure.savefig(outputs[1], bbox_inches="tight", pad_inches=0.025)
+    figure.savefig(outputs[2], dpi=600, bbox_inches="tight", pad_inches=0.025)
     plt.close(figure)
 
-    peak = float(residual.max())
-    bound = 2.0 ** -(2 * prefix_bits + 2)
-    print(f"  coarse illustrative fit: 6 segments, max err "
-          f"{float((coarse - exact).abs().max()):.3e}")
-    print(f"  B-PLA k={prefix_bits}: {len(edges) + 1} segments")
-    print(f"  peak tile residual {peak:.3e} against the bound {bound:.3e} "
-          f"({'within' if peak <= bound * 1.001 else 'ABOVE'})")
-    print(f"  GELU max |error|: {float((approximate - exact).abs().max()):.3e}")
-    return output
+    print(f"four-segment GELU max |error|: {gelu_error:.4e}")
+    print(f"k={prefix_bits} tile residual bound: {residual_bound:.4e}")
+    for output in outputs:
+        print(f"wrote {output}")
+    return outputs
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Render the PLA concept figure.")
-    parser.add_argument("--prefix-bits", type=int, default=4)
-    parser.add_argument("--dyadic-terms", type=int, default=2)
+    parser = argparse.ArgumentParser(description="Render the Introduction PLA concept figure.")
     parser.add_argument(
-        "--output", type=Path,
-        default=Path(__file__).resolve().parent / "fig_pla_concept.png",
+        "--prefix-bits",
+        type=int,
+        default=2,
+        help="mantissa-prefix width for panel (b); 2 gives a legible 4x4 tiling",
+    )
+    parser.add_argument(
+        "--output-stem",
+        type=Path,
+        default=Path(__file__).resolve().parent / "fig_pla_concept",
+        help="output path without extension; PDF, SVG, and PNG are written",
     )
     args = parser.parse_args()
-    print(f"wrote {render(args.output, args.prefix_bits, args.dyadic_terms)}")
+    render(args.output_stem, args.prefix_bits)
 
 
 if __name__ == "__main__":
