@@ -1,0 +1,210 @@
+[15:29:28] === P0: matched W8A8 / PAM / B-PLA comparison ===
+[15:29:28] START p1_gpt2_ptq
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 9369.07it/s]
+    perplexity=46.4722
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 10085.74it/s]
+    perplexity=47.0191, logit_nrmse=0.0614, argmax_agreement=92.8789, output_gain=0.9941
+[gpt2] scope=multiplication backend=ptq-w8a8-static ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6784.90it/s]
+    perplexity=86.4650, logit_nrmse=0.4152, argmax_agreement=56.9609, output_gain=0.9526
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7176.46it/s]
+    perplexity=47.3379, logit_nrmse=0.0898, argmax_agreement=88.2344, output_gain=1.0009
+[gpt2] scope=multiplication backend=pao-alpha ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6779.12it/s]
+    perplexity=47.0355, logit_nrmse=0.0608, argmax_agreement=92.4297, output_gain=0.9910
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 9358.76it/s]
+    perplexity=46.4724, logit_nrmse=0.0006, argmax_agreement=99.9219, output_gain=1.0000
+[gpt2] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7302.42it/s]
+    perplexity=46.4726, logit_nrmse=0.0003, argmax_agreement=99.9688, output_gain=1.0000
+
+wrote results/p1_gpt2_ptq.json
+[17:07:32] DONE  p1_gpt2_ptq (5884s)
+[17:07:32] START p2_vit_ptq
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Generating train split:   0%|          | 0/13394 [00:00<?, ? examples/s]Generating train split:  75%|███████▍  | 10000/13394 [00:00<00:00, 23446.12 examples/s]Generating train split: 100%|██████████| 13394/13394 [00:00<00:00, 27713.42 examples/s]
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7103.39it/s]
+    top1=86.7188, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7434.73it/s]
+    top1=87.1094, top5=99.6094, logit_nrmse=0.0572, argmax_agreement=98.0469, output_gain=1.0025
+[vit] scope=multiplication backend=ptq-w8a8-static ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6174.04it/s]
+    top1=83.9844, top5=99.2188, logit_nrmse=0.1705, argmax_agreement=96.0938, output_gain=0.9760
+[vit] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6271.72it/s]
+    top1=87.8906, top5=99.6094, logit_nrmse=0.1493, argmax_agreement=97.2656, output_gain=0.9704
+[vit] scope=multiplication backend=pao-alpha ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 5749.36it/s]
+    top1=86.3281, top5=99.2188, logit_nrmse=0.0561, argmax_agreement=98.0469, output_gain=0.9982
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7205.28it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0004, argmax_agreement=100.0000, output_gain=1.0000
+[vit] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 5529.84it/s]
+    top1=86.7188, top5=99.2188, logit_nrmse=0.0002, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/p2_vit_ptq.json
+[20:53:41] DONE  p2_vit_ptq (13569s)
+[20:53:41] === P2: does the gap grow with model scale? ===
+[20:53:41] START p3_gpt2_medium
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 6300.57it/s]
+    perplexity=33.8835
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 6909.97it/s]
+    perplexity=34.0617, logit_nrmse=0.0595, argmax_agreement=93.3281, output_gain=0.9985
+[gpt2] scope=multiplication backend=ptq-w8a8-static ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 5857.55it/s]
+    perplexity=54.6357, logit_nrmse=0.4127, argmax_agreement=60.7891, output_gain=0.9505
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 7335.73it/s]
+    perplexity=34.0636, logit_nrmse=0.0858, argmax_agreement=89.9531, output_gain=1.0123
+[gpt2] scope=multiplication backend=pao-alpha ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 6258.65it/s]
+    perplexity=34.2677, logit_nrmse=0.0596, argmax_agreement=93.2188, output_gain=0.9924
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 5554.79it/s]
+    perplexity=33.8842, logit_nrmse=0.0006, argmax_agreement=99.9766, output_gain=1.0000
+[gpt2] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/292 [00:00<?, ?it/s]Loading weights: 100%|██████████| 292/292 [00:00<00:00, 6050.83it/s]
+    perplexity=33.8836, logit_nrmse=0.0003, argmax_agreement=99.9922, output_gain=1.0000
+
+wrote results/p3_gpt2_medium.json
+[23:37:40] DONE  p3_gpt2_medium (9839s)
+[23:37:40] START p4_gpt2_large
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 5703.80it/s]
+    perplexity=32.3350
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 6019.28it/s]
+    perplexity=32.4487, logit_nrmse=0.0399, argmax_agreement=95.3750, output_gain=0.9960
+[gpt2] scope=multiplication backend=ptq-w8a8-static ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 6458.43it/s]
+    perplexity=33.5389, logit_nrmse=0.1103, argmax_agreement=88.2500, output_gain=0.9790
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 6517.10it/s]
+    perplexity=32.8792, logit_nrmse=0.0651, argmax_agreement=90.7969, output_gain=0.9944
+[gpt2] scope=multiplication backend=pao-alpha ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 5234.97it/s]
+    perplexity=32.3373, logit_nrmse=0.0329, argmax_agreement=96.2344, output_gain=0.9970
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 5571.77it/s]
+    perplexity=32.3354, logit_nrmse=0.0003, argmax_agreement=99.9375, output_gain=1.0000
+[gpt2] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/436 [00:00<?, ?it/s]Loading weights: 100%|██████████| 436/436 [00:00<00:00, 6839.55it/s]
+    perplexity=32.3353, logit_nrmse=0.0002, argmax_agreement=99.9531, output_gain=1.0000
+
+wrote results/p4_gpt2_large.json
+[02:47:12] DONE  p4_gpt2_large (11372s)
+[02:47:12] === bonus: wider coverage, only if the night has room ===
+[02:47:12] START p5_gpt2_full_coverage
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights:  59%|█████▉    | 88/148 [00:00<00:00, 872.66it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 1179.74it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6847.47it/s]
+    perplexity=191.4123, logit_nrmse=0.4287, argmax_agreement=38.5547, output_gain=0.9234
+[gpt2] scope=multiplication backend=ptq-w8a8-static ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8059.69it/s]
+    perplexity=451.8357, logit_nrmse=0.5636, argmax_agreement=24.3516, output_gain=0.8621
+[gpt2] scope=multiplication backend=pao ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 9700.24it/s]
+    perplexity=48.3176, logit_nrmse=0.1058, argmax_agreement=87.7969, output_gain=0.9729
+[gpt2] scope=multiplication backend=pao-alpha ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6048.61it/s]
+    perplexity=47.8506, logit_nrmse=0.0830, argmax_agreement=91.6328, output_gain=0.9990
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8725.48it/s]
+    perplexity=47.3045, logit_nrmse=0.0021, argmax_agreement=99.8750, output_gain=1.0000
+[gpt2] scope=multiplication backend=bpla-float ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7540.87it/s]
+    perplexity=47.3046, logit_nrmse=0.0011, argmax_agreement=99.9219, output_gain=1.0000
+
+wrote results/p5_gpt2_full_coverage.json
+[03:55:54] DONE  p5_gpt2_full_coverage (4122s)
+[03:55:54] SKIP p6_vit_large
+[03:55:54] === queue finished ===
+### p1_gpt2_ptq
+
+GPT-2, 25500 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); PAM alpha=1.056. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 46.472 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.019 | 6.14e-02 | 92.88 | 0.9941 | 48 |
+| W8A8 PTQ (per-tensor) | 86.465 | 4.15e-01 | 56.96 | 0.9526 | 48 |
+| PAM | 47.338 | 8.98e-02 | 88.23 | 1.0009 | 48 |
+| PAM+alpha | 47.036 | 6.08e-02 | 92.43 | 0.9910 | 48 |
+| B-PLA dyadic | 46.472 | 6.43e-04 | 99.92 | 1.0000 | 48 |
+| B-PLA float | 46.473 | 3.40e-04 | 99.97 | 1.0000 | 48 |
+
+### p2_vit_ptq
+
+ViT-Base, 256 images, Imagenette. Scope: multiplications only (nonlinear paths exact); PAM alpha=1.056. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 86.72 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 87.11 | 5.72e-02 | 98.05 | 1.0025 | 73 |
+| W8A8 PTQ (per-tensor) | 83.98 | 1.71e-01 | 96.09 | 0.9760 | 73 |
+| PAM | 87.89 | 1.49e-01 | 97.27 | 0.9704 | 73 |
+| PAM+alpha | 86.33 | 5.61e-02 | 98.05 | 0.9982 | 73 |
+| B-PLA dyadic | 86.72 | 4.29e-04 | 100.00 | 1.0000 | 73 |
+| B-PLA float | 86.72 | 2.24e-04 | 100.00 | 1.0000 | 73 |
+
+### p3_gpt2_medium
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); PAM alpha=1.056. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 33.884 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 34.062 | 5.95e-02 | 93.33 | 0.9985 | 96 |
+| W8A8 PTQ (per-tensor) | 54.636 | 4.13e-01 | 60.79 | 0.9505 | 96 |
+| PAM | 34.064 | 8.58e-02 | 89.95 | 1.0123 | 96 |
+| PAM+alpha | 34.268 | 5.96e-02 | 93.22 | 0.9924 | 96 |
+| B-PLA dyadic | 33.884 | 5.88e-04 | 99.98 | 1.0000 | 96 |
+| B-PLA float | 33.884 | 2.98e-04 | 99.99 | 1.0000 | 96 |
+
+### p4_gpt2_large
+
+GPT-2, 6375 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); PAM alpha=1.056. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 32.335 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 32.449 | 3.99e-02 | 95.38 | 0.9960 | 144 |
+| W8A8 PTQ (per-tensor) | 33.539 | 1.10e-01 | 88.25 | 0.9790 | 144 |
+| PAM | 32.879 | 6.51e-02 | 90.80 | 0.9944 | 144 |
+| PAM+alpha | 32.337 | 3.29e-02 | 96.23 | 0.9970 | 144 |
+| B-PLA dyadic | 32.335 | 3.23e-04 | 99.94 | 1.0000 | 144 |
+| B-PLA float | 32.335 | 1.64e-04 | 99.95 | 1.0000 | 144 |
+
+### p5_gpt2_full_coverage
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); output projection converted; PAM alpha=1.056. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 191.412 | 4.29e-01 | 38.55 | 0.9234 | 49 |
+| W8A8 PTQ (per-tensor) | 451.836 | 5.64e-01 | 24.35 | 0.8621 | 49 |
+| PAM | 48.318 | 1.06e-01 | 87.80 | 0.9729 | 49 |
+| PAM+alpha | 47.851 | 8.30e-02 | 91.63 | 0.9990 | 49 |
+| B-PLA dyadic | 47.304 | 2.06e-03 | 99.88 | 1.0000 | 49 |
+| B-PLA float | 47.305 | 1.09e-03 | 99.92 | 1.0000 | 49 |
+

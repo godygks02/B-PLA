@@ -1,0 +1,247 @@
+[05:28:54] === mantissa width sweep, multiplication scope ===
+[05:28:54] START w1_gpt2_mantissa_24
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7963.53it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 9817.29it/s]
+    perplexity=47.9151, logit_nrmse=0.0633, argmax_agreement=92.5078, output_gain=0.9948
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4803.65it/s]
+    perplexity=47.3049, logit_nrmse=0.0007, argmax_agreement=99.9297, output_gain=1.0000
+
+wrote results/w1_gpt2_mantissa_24.json
+[05:41:20] DONE  w1_gpt2_mantissa_24 (746s)
+[05:41:20] START w1_gpt2_mantissa_16
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7226.17it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7059.03it/s]
+    perplexity=47.9151, logit_nrmse=0.0633, argmax_agreement=92.5078, output_gain=0.9948
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5617.30it/s]
+    perplexity=47.3050, logit_nrmse=0.0007, argmax_agreement=99.9297, output_gain=1.0000
+
+wrote results/w1_gpt2_mantissa_16.json
+[05:53:46] DONE  w1_gpt2_mantissa_16 (746s)
+[05:53:46] START w1_gpt2_mantissa_12
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7385.04it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7124.98it/s]
+    perplexity=47.9151, logit_nrmse=0.0633, argmax_agreement=92.5078, output_gain=0.9948
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6371.18it/s]
+    perplexity=47.3037, logit_nrmse=0.0008, argmax_agreement=99.9297, output_gain=0.9999
+
+wrote results/w1_gpt2_mantissa_12.json
+[06:06:13] DONE  w1_gpt2_mantissa_12 (747s)
+[06:06:13] START w1_gpt2_mantissa_10
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6628.62it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7245.32it/s]
+    perplexity=47.9151, logit_nrmse=0.0633, argmax_agreement=92.5078, output_gain=0.9948
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6261.67it/s]
+    perplexity=47.3054, logit_nrmse=0.0017, argmax_agreement=99.8359, output_gain=1.0000
+
+wrote results/w1_gpt2_mantissa_10.json
+[06:18:40] DONE  w1_gpt2_mantissa_10 (747s)
+[06:18:40] START w1_gpt2_mantissa_8
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7067.95it/s]
+    perplexity=47.3043
+[gpt2] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 8182.07it/s]
+    perplexity=47.9151, logit_nrmse=0.0633, argmax_agreement=92.5078, output_gain=0.9948
+[gpt2] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 6476.14it/s]
+    perplexity=47.3213, logit_nrmse=0.0060, argmax_agreement=99.2031, output_gain=1.0008
+
+wrote results/w1_gpt2_mantissa_8.json
+[06:31:07] DONE  w1_gpt2_mantissa_8 (747s)
+[06:31:07] START w2_vit_mantissa_24
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6270.17it/s]
+    top1=89.0625, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7435.98it/s]
+    top1=89.0625, top5=100.0000, logit_nrmse=0.0588, argmax_agreement=98.4375, output_gain=1.0024
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8252.93it/s]
+    top1=89.0625, top5=99.2188, logit_nrmse=0.0004, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/w2_vit_mantissa_24.json
+[07:01:53] DONE  w2_vit_mantissa_24 (1846s)
+[07:01:53] START w2_vit_mantissa_16
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6658.00it/s]
+    top1=89.0625, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8300.38it/s]
+    top1=89.0625, top5=100.0000, logit_nrmse=0.0588, argmax_agreement=98.4375, output_gain=1.0024
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7869.61it/s]
+    top1=89.0625, top5=99.2188, logit_nrmse=0.0004, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/w2_vit_mantissa_16.json
+[07:32:39] DONE  w2_vit_mantissa_16 (1846s)
+[07:32:39] START w2_vit_mantissa_12
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7252.75it/s]
+    top1=89.0625, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 9666.86it/s]
+    top1=89.0625, top5=100.0000, logit_nrmse=0.0588, argmax_agreement=98.4375, output_gain=1.0024
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6319.63it/s]
+    top1=89.0625, top5=99.2188, logit_nrmse=0.0005, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/w2_vit_mantissa_12.json
+[08:03:23] DONE  w2_vit_mantissa_12 (1844s)
+[08:03:23] START w2_vit_mantissa_10
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 11630.01it/s]
+    top1=89.0625, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6654.09it/s]
+    top1=89.0625, top5=100.0000, logit_nrmse=0.0588, argmax_agreement=98.4375, output_gain=1.0024
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 8726.86it/s]
+    top1=89.0625, top5=99.2188, logit_nrmse=0.0013, argmax_agreement=100.0000, output_gain=1.0000
+
+wrote results/w2_vit_mantissa_10.json
+[08:34:08] DONE  w2_vit_mantissa_10 (1845s)
+[08:34:08] START w2_vit_mantissa_8
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[vit] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 7379.53it/s]
+    top1=89.0625, top5=99.2188
+[vit] scope=multiplication backend=ptq-w8a8 ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 10384.51it/s]
+    top1=89.0625, top5=100.0000, logit_nrmse=0.0588, argmax_agreement=98.4375, output_gain=1.0024
+[vit] scope=multiplication backend=bpla-dyadic ...
+Loading weights:   0%|          | 0/200 [00:00<?, ?it/s]Loading weights: 100%|██████████| 200/200 [00:00<00:00, 6461.42it/s]
+    top1=89.0625, top5=99.2188, logit_nrmse=0.0045, argmax_agreement=100.0000, output_gain=0.9998
+
+wrote results/w2_vit_mantissa_8.json
+[09:04:53] DONE  w2_vit_mantissa_8 (1845s)
+[09:04:53] === mantissa sweep finished ===
+### w1_gpt2_mantissa_10
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); mantissa 10 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.915 | 6.33e-02 | 92.51 | 0.9948 | 48 |
+| B-PLA dyadic | 47.305 | 1.70e-03 | 99.84 | 1.0000 | 48 |
+
+### w1_gpt2_mantissa_12
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); mantissa 12 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.915 | 6.33e-02 | 92.51 | 0.9948 | 48 |
+| B-PLA dyadic | 47.304 | 7.62e-04 | 99.93 | 0.9999 | 48 |
+
+### w1_gpt2_mantissa_16
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); mantissa 16 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.915 | 6.33e-02 | 92.51 | 0.9948 | 48 |
+| B-PLA dyadic | 47.305 | 6.77e-04 | 99.93 | 1.0000 | 48 |
+
+### w1_gpt2_mantissa_24
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); mantissa 24 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.915 | 6.33e-02 | 92.51 | 0.9948 | 48 |
+| B-PLA dyadic | 47.305 | 6.83e-04 | 99.93 | 1.0000 | 48 |
+
+### w1_gpt2_mantissa_8
+
+GPT-2, 12750 tokens, WikiText-2. Scope: multiplications only (nonlinear paths exact); mantissa 8 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | PPL | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 47.304 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 47.915 | 6.33e-02 | 92.51 | 0.9948 | 48 |
+| B-PLA dyadic | 47.321 | 5.95e-03 | 99.20 | 1.0008 | 48 |
+
+### w2_vit_mantissa_10
+
+ViT-Base, 128 images, Imagenette. Scope: multiplications only (nonlinear paths exact); mantissa 10 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 89.06 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 89.06 | 5.88e-02 | 98.44 | 1.0024 | 73 |
+| B-PLA dyadic | 89.06 | 1.26e-03 | 100.00 | 1.0000 | 73 |
+
+### w2_vit_mantissa_12
+
+ViT-Base, 128 images, Imagenette. Scope: multiplications only (nonlinear paths exact); mantissa 12 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 89.06 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 89.06 | 5.88e-02 | 98.44 | 1.0024 | 73 |
+| B-PLA dyadic | 89.06 | 5.23e-04 | 100.00 | 1.0000 | 73 |
+
+### w2_vit_mantissa_16
+
+ViT-Base, 128 images, Imagenette. Scope: multiplications only (nonlinear paths exact); mantissa 16 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 89.06 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 89.06 | 5.88e-02 | 98.44 | 1.0024 | 73 |
+| B-PLA dyadic | 89.06 | 4.36e-04 | 100.00 | 1.0000 | 73 |
+
+### w2_vit_mantissa_24
+
+ViT-Base, 128 images, Imagenette. Scope: multiplications only (nonlinear paths exact); mantissa 24 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 89.06 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 89.06 | 5.88e-02 | 98.44 | 1.0024 | 73 |
+| B-PLA dyadic | 89.06 | 4.37e-04 | 100.00 | 1.0000 | 73 |
+
+### w2_vit_mantissa_8
+
+ViT-Base, 128 images, Imagenette. Scope: multiplications only (nonlinear paths exact); mantissa 8 bits. k=4, T=2. Zero weight updates in every row; logit metrics are row-centered.
+
+| Backend | top-1 (%) | logit NRMSE | agreement | gain | sites |
+|---|---|---|---|---|---|
+| Exact | 89.06 | — | — | — | 0 |
+| W8A8 PTQ (per-token) | 89.06 | 5.88e-02 | 98.44 | 1.0024 | 73 |
+| B-PLA dyadic | 89.06 | 4.48e-03 | 100.00 | 0.9998 | 73 |
+
