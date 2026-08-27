@@ -1,10 +1,13 @@
 """Render the two-panel PLA concept figure used in the Introduction.
 
-Panel (a) compares exact GELU with a deliberately coarse piecewise-affine fit,
-plus an inset of the residual so the per-segment structure is unambiguous. Four
-segments are used rather than a realistic count because the figure has to show
-*how* the approximation is built: B-PLA's own GELU table places 227 segments and
-its curve lies on the function, so plotting it would show nothing.
+Panel (a) compares exact GELU with a deliberately coarse four-segment
+piecewise-affine fit, breakpoints marked. Four is not a realistic count: B-PLA's
+own GELU table places 227 segments and its curve lies on the function, so
+plotting that would show nothing about how the approximation is built.
+
+Both panels put their legend in the figure margin. In-axes legends covered the
+curve in (a) and the surface in (b), and shrinking them only made them
+unreadable while still covering data.
 
 Panel (b) shows the exact mantissa-interaction surface ``m1*m2`` as a smooth
 surface coloured by height, with the B-PLA tile-centre affine approximation
@@ -151,26 +154,18 @@ def draw_gelu_panel(axis: plt.Axes) -> float:
     axis.set_yticks(np.arange(-0.5, 3.1, 0.5))
     axis.grid(True, color="#E5E5E5", linewidth=0.55)
     axis.set_axisbelow(True)
-    axis.legend(loc="lower right", frameon=False, handlelength=2.2)
     axis.set_title("(a) A nonlinear operator", pad=7, fontweight="bold")
 
-    # The residual makes the segmentation unambiguous: it returns toward zero
-    # inside every segment and jumps at the boundaries.
-    # Upper-left is the one region the curve never enters.
-    inset = axis.inset_axes((0.075, 0.60, 0.40, 0.30))
-    inset.plot(x, approximate - exact, color=COLOR_APPROX, linewidth=0.9)
-    inset.axhline(0.0, color="#777777", linewidth=0.5)
-    for boundary in breakpoints[1:-1]:
-        inset.axvline(boundary, color=COLOR_BOUNDARY, linewidth=0.6,
-                      linestyle=(0, (1.5, 2.2)))
-    inset.set_xlim(-3.0, 3.0)
-    inset.set_xticks([])
-    inset.tick_params(axis="y", labelsize=5.6, pad=1.2, length=2.0)
-    inset.set_title("residual", fontsize=6.0, pad=2.0)
-    for spine in inset.spines.values():
-        spine.set_linewidth(0.6)
-
-    return float(np.max(np.abs(approximate - exact)))
+    # Legend entries are returned rather than drawn: both panels put theirs in
+    # the figure margin, because an in-axes legend sat on the data in (a) and on
+    # the surface in (b).
+    handles = [
+        Line2D([0], [0], color=COLOR_EXACT, linewidth=2.0, label="Exact GELU"),
+        Line2D([0], [0], color=COLOR_APPROX, linewidth=1.8, marker="o",
+               markersize=3.2, markerfacecolor="white", markeredgecolor=COLOR_APPROX,
+               label="Piecewise-affine fit"),
+    ]
+    return float(np.max(np.abs(approximate - exact))), handles
 
 
 def draw_mantissa_panel(axis: plt.Axes, prefix_bits: int):
@@ -259,15 +254,7 @@ def draw_mantissa_panel(axis: plt.Axes, prefix_bits: int):
             label=rf"${segments}\!\times\!{segments}$ prefix planes",
         ),
     ]
-    axis.legend(
-        handles=legend_handles,
-        loc="upper left",
-        bbox_to_anchor=(-0.02, 0.97),
-        frameon=False,
-        borderaxespad=0.0,
-        handlelength=1.5,
-    )
-    return surface, 2.0 ** (-2 * prefix_bits - 2)
+    return surface, 2.0 ** (-2 * prefix_bits - 2), legend_handles
 
 
 def render(output_stem: Path, prefix_bits: int) -> list[Path]:
@@ -277,14 +264,28 @@ def render(output_stem: Path, prefix_bits: int) -> list[Path]:
         raise ValueError("prefix_bits must be between 1 and 4 for a legible concept figure")
 
     configure_matplotlib()
-    figure = plt.figure(figsize=(7.2, 3.05), constrained_layout=False)
+    figure = plt.figure(figsize=(7.2, 3.10), constrained_layout=False)
     grid = figure.add_gridspec(1, 2, width_ratios=(1.0, 1.16), wspace=0.20)
     left = figure.add_subplot(grid[0, 0])
     right = figure.add_subplot(grid[0, 1], projection="3d")
 
-    gelu_error = draw_gelu_panel(left)
-    surface, residual_bound = draw_mantissa_panel(right, prefix_bits)
-    figure.subplots_adjust(left=0.075, right=0.93, bottom=0.16, top=0.89)
+    gelu_error, gelu_handles = draw_gelu_panel(left)
+    surface, residual_bound, tile_handles = draw_mantissa_panel(right, prefix_bits)
+    figure.subplots_adjust(left=0.075, right=0.93, bottom=0.245, top=0.90)
+
+    # One legend in the margin for both panels. In-axes legends sat on the GELU
+    # curve and on the product surface, and shrinking them only made them
+    # unreadable while still covering data.
+    figure.legend(
+        handles=gelu_handles + tile_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.012),
+        ncol=4,
+        frameon=False,
+        handlelength=1.9,
+        columnspacing=1.5,
+        handletextpad=0.55,
+    )
 
     bar = figure.colorbar(surface, ax=right, shrink=0.52, aspect=13, pad=0.02)
     bar.set_label("height", fontsize=7.0, labelpad=2)
