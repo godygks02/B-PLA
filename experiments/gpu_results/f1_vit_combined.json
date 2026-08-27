@@ -1,0 +1,162 @@
+{
+  "configuration": {
+    "models": [
+      "vit"
+    ],
+    "backends": [
+      "exact",
+      "ptq-fqvit",
+      "pao",
+      "bpla-dyadic"
+    ],
+    "scopes": [
+      "combined"
+    ],
+    "vit_model_id": "google/vit-base-patch16-224",
+    "vit_dataset_id": "johnowhitaker/imagenette2-320",
+    "num_samples": 256,
+    "batch_size": 32,
+    "gpt2_model_id": "gpt2",
+    "gpt2_dataset_id": "Salesforce/wikitext",
+    "gpt2_dataset_config": "wikitext-2-raw-v1",
+    "gpt2_sequence_length": 256,
+    "gpt2_target_tokens": 2048,
+    "prefix_bits": 4,
+    "dyadic_terms": 2,
+    "nonlinear_dyadic_terms": 4,
+    "max_shift": 16,
+    "mantissa_bits": null,
+    "activation_range": 4.0,
+    "linear_chunk_out": 512,
+    "calibration_batches": 2,
+    "calibrate_activation": true,
+    "replace_layernorm": true,
+    "replace_lm_head": false,
+    "replace_conv2d": true,
+    "ptq_weight_bits": 8,
+    "fqvit_softmax_bits": 4,
+    "ptq_activation_bits": 8,
+    "ptq_percentile": 99.99,
+    "ptq_per_channel_weights": true,
+    "pao_alpha": 1.056,
+    "seed": 0,
+    "device": "cuda",
+    "save_logits": false,
+    "max_logit_cache_gb": 2.0,
+    "output": "results/f1_vit_combined.json"
+  },
+  "notes": [
+    "Zero weight updates in every condition; PAO and B-PLA are both drop-in.",
+    "PAO forward primitives follow Kosson and Jaggi (NeurIPS 2023) Eq. (5)-(20); verified in tests/test_pao.py against the Mogami int-addition trick.",
+    "PAO's GELU is our composition from PA primitives; the paper's models use ReLU.",
+    "Both W8A8 backends use per-output-channel symmetric weight quantization, simulated by quantize-dequantize with a float32 accumulator, which is the same accumulator every other backend uses.",
+    "ptq-w8a8 uses dynamic per-token activation scales (ZeroQuant / LLM.int8() style); ptq-w8a8-static uses static per-tensor scales from percentile calibration. The static form is the conventional recipe and the dynamic form is the stronger one; both are reported.",
+    "The W8A8 backends run at the multiplication scope only: W8A8 leaves the nonlinear paths in floating point by convention.",
+    "Wall-clock is not reported: neither backend has native hardware support.",
+    "Logit metrics are row-centered: softmax ignores a per-row constant, and for GPT-2 that constant holds 99.95% of the raw logit energy."
+  ],
+  "results": [
+    {
+      "model": "vit",
+      "scope": "none",
+      "backend": "exact",
+      "coverage": {
+        "linear_modules": 0,
+        "activation_modules": 0,
+        "attention_blocks": 0,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 1.0256457887589931,
+      "top1": 86.71875,
+      "top5": 99.21875,
+      "samples": 256
+    },
+    {
+      "model": "vit",
+      "scope": "combined",
+      "backend": "ptq-fqvit",
+      "coverage": {
+        "linear_modules": 74,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.65310899913311,
+        "calibration_samples": 64,
+        "ptq_summary": {
+          "quantized_layers": 99,
+          "quantized_attention_blocks": 12,
+          "activation_range_min": 0.08960293233394623,
+          "activation_range_max": 49.2672233581543,
+          "attention_probability_range_max": null,
+          "activation_granularity": "tensor",
+          "activation_percentile": 100.0,
+          "per_channel_weights": true,
+          "weight_bits": 8,
+          "activation_bits": 8
+        }
+      },
+      "emulated_forward_seconds": 1.651077289134264,
+      "top1": 84.765625,
+      "top5": 98.828125,
+      "samples": 256,
+      "logit_mae": 0.213148463756629,
+      "logit_rmse": 0.29556953884917697,
+      "logit_nrmse": 0.2526788601053685,
+      "argmax_agreement": 92.578125,
+      "output_gain": 0.9938242718806284,
+      "uncentered_logit_mae": 0.2131494587676882,
+      "uncentered_output_gain": 0.9938242685099152
+    },
+    {
+      "model": "vit",
+      "scope": "combined",
+      "backend": "pao",
+      "coverage": {
+        "linear_modules": 74,
+        "activation_modules": 12,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 1905.6743291914463,
+      "top1": 86.71875,
+      "top5": 99.21875,
+      "samples": 256,
+      "logit_mae": 0.3089868185767132,
+      "logit_rmse": 0.4250550480757291,
+      "logit_nrmse": 0.3633744716995788,
+      "argmax_agreement": 88.28125,
+      "output_gain": 0.9045039940111645,
+      "uncentered_logit_mae": 0.30898476961774757,
+      "uncentered_output_gain": 0.9045040017512745
+    },
+    {
+      "model": "vit",
+      "scope": "combined",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 74,
+        "activation_modules": 12,
+        "attention_blocks": 12,
+        "layernorm_modules": 25,
+        "calibration_seconds": 0.23401905223727226,
+        "calibration_samples": 64,
+        "calibration_range": 48.68919372558594
+      },
+      "emulated_forward_seconds": 3033.0505947321653,
+      "top1": 86.328125,
+      "top5": 99.21875,
+      "samples": 256,
+      "logit_mae": 0.007323351004373152,
+      "logit_rmse": 0.010197622043035388,
+      "logit_nrmse": 0.00871782499526925,
+      "argmax_agreement": 99.609375,
+      "output_gain": 1.0003110814963923,
+      "uncentered_logit_mae": 0.007323310200136575,
+      "uncentered_output_gain": 1.0003110814609582
+    }
+  ]
+}
