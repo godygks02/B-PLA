@@ -107,6 +107,30 @@
       "output_gain": 1.0024164898949663,
       "uncentered_logit_mae": 0.04965729923248523,
       "uncentered_output_gain": 1.0024164872224588
+    },
+    {
+      "model": "vit",
+      "scope": "multiplication",
+      "backend": "bpla-dyadic",
+      "coverage": {
+        "linear_modules": 73,
+        "activation_modules": 0,
+        "attention_blocks": 12,
+        "layernorm_modules": 0,
+        "calibration_seconds": 0.0,
+        "calibration_samples": 0
+      },
+      "emulated_forward_seconds": 1836.78453823179,
+      "top1": 89.0625,
+      "top5": 99.21875,
+      "samples": 128,
+      "logit_mae": 0.004021124344621368,
+      "logit_rmse": 0.005317149591772671,
+      "logit_nrmse": 0.004484671829431133,
+      "argmax_agreement": 100.0,
+      "output_gain": 0.9998112585721497,
+      "uncentered_logit_mae": 0.0040212451021672,
+      "uncentered_output_gain": 0.9998112585974988
     }
   ]
 }
