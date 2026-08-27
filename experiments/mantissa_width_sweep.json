@@ -1,0 +1,600 @@
+{
+  "configuration": {
+    "num_samples": 1000000,
+    "mantissa_bits": [
+      24,
+      20,
+      16,
+      14,
+      12,
+      10,
+      8,
+      6
+    ],
+    "dyadic_terms": [
+      2,
+      3
+    ],
+    "prefix_bits": 4,
+    "distributions": [
+      "uniform",
+      "normal",
+      "lognormal"
+    ],
+    "seed": 0,
+    "output": "experiments\\mantissa_width_sweep.json"
+  },
+  "energy_table_pj": {
+    "fp32_mul": 3.7,
+    "int8_mul": 0.2,
+    "int32_add": 0.1
+  },
+  "notes": [
+    "Energy is the 45 nm arithmetic proxy from modules/compute_energy.py; it excludes table, register and memory traffic, which B-PLA has and an int8 multiplier does not, so the B-PLA figures are optimistic.",
+    "Narrowing the mantissa rounds the operand fractions too, so below full width B-PLA no longer carries m1 and m2 exactly.",
+    "int8 error is operand quantization only; the int32 product is exact."
+  ],
+  "results": [
+    {
+      "distribution": "uniform",
+      "method": "pam",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.052965469939857464,
+      "gain": 0.9558040646067043,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "uniform",
+      "method": "pam-alpha",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.03371328723834304,
+      "gain": 0.9925534949346179,
+      "energy_pj": 0.4
+    },
+    {
+      "distribution": "uniform",
+      "method": "int8",
+      "mantissa_bits": 8,
+      "dyadic_terms": null,
+      "relative_rmse": 0.005575515474226413,
+      "gain": 1.0000126691091313,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00035568440661561183,
+      "gain": 0.9999994484436595,
+      "energy_pj": 0.6550000000000001,
+      "energy_vs_int8": 3.2750000000000004
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003556840699174288,
+      "gain": 0.9999994527396945,
+      "energy_pj": 0.555,
+      "energy_vs_int8": 2.775
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003558733536993777,
+      "gain": 0.9999995748496204,
+      "energy_pj": 0.455,
+      "energy_vs_int8": 2.275
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00035806595443936974,
+      "gain": 0.9999994158995498,
+      "energy_pj": 0.405,
+      "energy_vs_int8": 2.025
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003943647207716421,
+      "gain": 0.9999991430828724,
+      "energy_pj": 0.35500000000000004,
+      "energy_vs_int8": 1.7750000000000001
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0007708495426921781,
+      "gain": 0.9999980212289235,
+      "energy_pj": 0.305,
+      "energy_vs_int8": 1.525
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00276321967574424,
+      "gain": 0.9999734036132778,
+      "energy_pj": 0.255,
+      "energy_vs_int8": 1.275
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.010939147186265569,
+      "gain": 0.999597174056333,
+      "energy_pj": 0.20500000000000002,
+      "energy_vs_int8": 1.025
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00018582347106217627,
+      "gain": 1.0000000562508424,
+      "energy_pj": 0.8800000000000002,
+      "energy_vs_int8": 4.400000000000001
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00018582570215842903,
+      "gain": 1.0000000608560673,
+      "energy_pj": 0.7425,
+      "energy_vs_int8": 3.7125
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00018614505865722074,
+      "gain": 1.000000088167983,
+      "energy_pj": 0.6050000000000001,
+      "energy_vs_int8": 3.0250000000000004
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00019049319271418675,
+      "gain": 1.0000000236395457,
+      "energy_pj": 0.5362500000000001,
+      "energy_vs_int8": 2.6812500000000004
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0002521656096964165,
+      "gain": 0.9999996476340745,
+      "energy_pj": 0.4675000000000001,
+      "energy_vs_int8": 2.3375000000000004
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0007063816166466017,
+      "gain": 0.9999972680776797,
+      "energy_pj": 0.39875,
+      "energy_vs_int8": 1.99375
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0027415806631222684,
+      "gain": 0.9999777996053308,
+      "energy_pj": 0.33,
+      "energy_vs_int8": 1.65
+    },
+    {
+      "distribution": "uniform",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.010936227603440476,
+      "gain": 0.9994655363271511,
+      "energy_pj": 0.26125000000000004,
+      "energy_vs_int8": 1.3062500000000001
+    },
+    {
+      "distribution": "normal",
+      "method": "pam",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.047616990351190505,
+      "gain": 0.9621539639671519,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "normal",
+      "method": "pam-alpha",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.03090150782287229,
+      "gain": 1.0002565809144186,
+      "energy_pj": 0.4
+    },
+    {
+      "distribution": "normal",
+      "method": "int8",
+      "mantissa_bits": 8,
+      "dyadic_terms": null,
+      "relative_rmse": 0.015828906437301452,
+      "gain": 0.9999853463644316,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003423486894111771,
+      "gain": 0.9999979422086556,
+      "energy_pj": 0.6550000000000001,
+      "energy_vs_int8": 3.2750000000000004
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00034235014663352054,
+      "gain": 0.9999979501901495,
+      "energy_pj": 0.555,
+      "energy_vs_int8": 2.775
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00034253841021531395,
+      "gain": 0.9999979188062434,
+      "energy_pj": 0.455,
+      "energy_vs_int8": 2.275
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00034459353601920214,
+      "gain": 0.9999976211958426,
+      "energy_pj": 0.405,
+      "energy_vs_int8": 2.025
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00038013790349222874,
+      "gain": 0.9999969328010481,
+      "energy_pj": 0.35500000000000004,
+      "energy_vs_int8": 1.7750000000000001
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0007438794916214537,
+      "gain": 0.9999988803601874,
+      "energy_pj": 0.305,
+      "energy_vs_int8": 1.525
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.002670812545203756,
+      "gain": 0.9999692914163791,
+      "energy_pj": 0.255,
+      "energy_vs_int8": 1.275
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.010571053286450943,
+      "gain": 0.9995563899267611,
+      "energy_pj": 0.20500000000000002,
+      "energy_vs_int8": 1.025
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00017641255999129265,
+      "gain": 0.99999965240058,
+      "energy_pj": 0.8800000000000002,
+      "energy_vs_int8": 4.400000000000001
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00017641308031085177,
+      "gain": 0.9999996527565255,
+      "energy_pj": 0.7425,
+      "energy_vs_int8": 3.7125
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0001767382478931423,
+      "gain": 0.9999996262765609,
+      "energy_pj": 0.6050000000000001,
+      "energy_vs_int8": 3.0250000000000004
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0001808442082358063,
+      "gain": 0.9999995197542606,
+      "energy_pj": 0.5362500000000001,
+      "energy_vs_int8": 2.6812500000000004
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00024200793949931388,
+      "gain": 0.9999991917305932,
+      "energy_pj": 0.4675000000000001,
+      "energy_vs_int8": 2.3375000000000004
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0006810460109284414,
+      "gain": 0.9999996776274529,
+      "energy_pj": 0.39875,
+      "energy_vs_int8": 1.99375
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0026516314988646924,
+      "gain": 0.9999851306331262,
+      "energy_pj": 0.33,
+      "energy_vs_int8": 1.65
+    },
+    {
+      "distribution": "normal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.010553152168824924,
+      "gain": 0.9994310021576508,
+      "energy_pj": 0.26125000000000004,
+      "energy_vs_int8": 1.3062500000000001
+    },
+    {
+      "distribution": "lognormal",
+      "method": "pam",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.0478668180645762,
+      "gain": 0.9614317894975813,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "lognormal",
+      "method": "pam-alpha",
+      "mantissa_bits": null,
+      "dyadic_terms": null,
+      "relative_rmse": 0.029943505868080502,
+      "gain": 0.9995180041030942,
+      "energy_pj": 0.4
+    },
+    {
+      "distribution": "lognormal",
+      "method": "int8",
+      "mantissa_bits": 8,
+      "dyadic_terms": null,
+      "relative_rmse": 0.13488719152283832,
+      "gain": 1.0010934247371963,
+      "energy_pj": 0.2
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003370349654542986,
+      "gain": 0.9999944819416283,
+      "energy_pj": 0.6550000000000001,
+      "energy_vs_int8": 3.2750000000000004
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00033706343993989394,
+      "gain": 0.9999945016153596,
+      "energy_pj": 0.555,
+      "energy_vs_int8": 2.775
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.00033824118581080747,
+      "gain": 0.9999932997946951,
+      "energy_pj": 0.455,
+      "energy_vs_int8": 2.275
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0003400156212938631,
+      "gain": 0.999995188240532,
+      "energy_pj": 0.405,
+      "energy_vs_int8": 2.025
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.000379033895487939,
+      "gain": 0.9999864131546207,
+      "energy_pj": 0.35500000000000004,
+      "energy_vs_int8": 1.7750000000000001
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.0007636497960957374,
+      "gain": 0.9999812974795506,
+      "energy_pj": 0.305,
+      "energy_vs_int8": 1.525
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.002595471548545934,
+      "gain": 0.9998108467952707,
+      "energy_pj": 0.255,
+      "energy_vs_int8": 1.275
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 2,
+      "relative_rmse": 0.010254877383042022,
+      "gain": 1.000079284856933,
+      "energy_pj": 0.20500000000000002,
+      "energy_vs_int8": 1.025
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 24,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00018285329562599012,
+      "gain": 0.9999907781046564,
+      "energy_pj": 0.8800000000000002,
+      "energy_vs_int8": 4.400000000000001
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 20,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0001828925903981727,
+      "gain": 0.9999907960811045,
+      "energy_pj": 0.7425,
+      "energy_vs_int8": 3.7125
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 16,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0001828471659813961,
+      "gain": 0.9999899538017993,
+      "energy_pj": 0.6050000000000001,
+      "energy_vs_int8": 3.0250000000000004
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 14,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0001871027288426265,
+      "gain": 0.999990931772671,
+      "energy_pj": 0.5362500000000001,
+      "energy_vs_int8": 2.6812500000000004
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 12,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.00024965158863280947,
+      "gain": 0.9999851102267069,
+      "energy_pj": 0.4675000000000001,
+      "energy_vs_int8": 2.3375000000000004
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 10,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0007070610860599199,
+      "gain": 0.999966351524936,
+      "energy_pj": 0.39875,
+      "energy_vs_int8": 1.99375
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 8,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.002586149490757568,
+      "gain": 0.9998300680180467,
+      "energy_pj": 0.33,
+      "energy_vs_int8": 1.65
+    },
+    {
+      "distribution": "lognormal",
+      "method": "bpla-dyadic",
+      "mantissa_bits": 6,
+      "dyadic_terms": 3,
+      "relative_rmse": 0.0102201863849501,
+      "gain": 0.9998921651212643,
+      "energy_pj": 0.26125000000000004,
+      "energy_vs_int8": 1.3062500000000001
+    }
+  ]
+}
