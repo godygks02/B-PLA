@@ -54,6 +54,8 @@ def _scope_note(record: dict) -> str:
         parts.append("output projection converted")
     if config.get("replace_conv2d"):
         parts.append("patch embedding converted")
+    if config.get("mantissa_bits"):
+        parts.append(f"mantissa {config['mantissa_bits']} bits")
     if config.get("replace_layernorm"):
         parts.append("LayerNorm converted")
     # The constant now has a default, so its presence in the configuration no

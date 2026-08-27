@@ -130,6 +130,7 @@ def _bpla_config(args: argparse.Namespace, affine_path: str) -> TorchBPLAConfig:
         dyadic_terms=args.dyadic_terms,
         nonlinear_dyadic_terms=args.nonlinear_dyadic_terms,
         max_shift=args.max_shift,
+        mantissa_bits=args.mantissa_bits,
         activation_range=args.activation_range,
         linear_chunk_out=args.linear_chunk_out,
     )
@@ -548,6 +549,14 @@ def parse_args() -> argparse.Namespace:
         help="Term budget for the nonlinear tables; defaults to --dyadic-terms.",
     )
     parser.add_argument("--max-shift", type=int, default=16)
+    parser.add_argument(
+        "--mantissa-bits",
+        type=int,
+        default=None,
+        help="Width of the B-PLA fixed-point mantissa datapath including the implicit "
+             "leading one. Default keeps full float32 precision. The multiplier spends "
+             "most of its energy on additions whose cost is linear in this width.",
+    )
     parser.add_argument("--activation-range", type=float, default=4.0)
     parser.add_argument("--linear-chunk-out", type=int, default=128)
     parser.add_argument("--calibration-batches", type=int, default=2)

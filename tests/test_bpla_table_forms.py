@@ -335,3 +335,86 @@ print("MISMATCH" if bad else "MATCH", bad)
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MantissaWidthTests(unittest.TestCase):
+    """The third complexity knob: how wide the fixed-point mantissa path is.
+
+    The multiplier spends most of its energy on additions whose cost is linear
+    in this width, so it is the knob the cost model is most sensitive to.
+    """
+
+    def _multiply(self, a, b, bits, terms=2):
+        config = TorchBPLAConfig(affine_path="dyadic", dyadic_terms=terms, mantissa_bits=bits)
+        return bpla_multiply_torch(a, b, config, SharedBPLATables(config)).double()
+
+    def setUp(self):
+        torch.manual_seed(0)
+        self.a = torch.empty(60000).uniform_(-6.0, 6.0)
+        self.b = torch.empty(60000).uniform_(-6.0, 6.0)
+        self.exact = self.a.double() * self.b.double()
+
+    def _error(self, bits):
+        approximate = self._multiply(self.a, self.b, bits)
+        return float(
+            approximate.sub(self.exact).pow(2).mean().sqrt() / self.exact.pow(2).mean().sqrt()
+        )
+
+    def test_full_width_matches_unconstrained(self):
+        """24 bits is float32's significand, so it must cost nothing."""
+
+        self.assertAlmostEqual(self._error(24), self._error(None), places=9)
+
+    def test_error_grows_monotonically_as_the_path_narrows(self):
+        errors = [self._error(bits) for bits in (24, 16, 12, 10, 8, 6)]
+        for narrower, wider in zip(errors[1:], errors[:-1]):
+            self.assertGreaterEqual(narrower, wider * 0.999)
+
+    def test_sixteen_bits_is_nearly_free(self):
+        """Where the knee is decides whether the cost argument works."""
+
+        self.assertLess(self._error(16), self._error(24) * 1.05)
+
+    def test_narrowing_costs_the_exactness_on_powers_of_two(self):
+        """Full width multiplies a power of two exactly; a narrow path cannot.
+
+        Exactness on powers of two is one of the properties B-PLA has and
+        Mitchell-family multiplication does not, and it survives only while the
+        operand mantissas are carried in full. Once the datapath rounds them,
+        a zero-fraction operand no longer rescues the other one. The residual is
+        bounded by the datapath resolution, which is what makes the trade
+        predictable rather than merely empirical.
+        """
+
+        powers = torch.tensor([0.25, 0.5, 1.0, 2.0, -4.0, 8.0])
+        others = torch.tensor([1.3, -2.7, 0.4, 3.9, -1.1, 6.25])
+        exact = powers.double() * others.double()
+
+        torch.testing.assert_close(
+            self._multiply(powers, others, 24), exact, rtol=1e-6, atol=0.0
+        )
+        for bits in (16, 12, 8):
+            with self.subTest(bits=bits):
+                error = float(
+                    (self._multiply(powers, others, bits) - exact).abs().div(exact.abs()).max()
+                )
+                self.assertGreater(error, 0.0)
+                self.assertLess(error, 2.0 ** -(bits - 1))
+
+    def test_quantization_grid_is_actually_applied(self):
+        """Results land on the datapath grid, at 2^-bits after normalization.
+
+        The mantissa is held to 2^-(bits-1) in [1, 2), but a product whose
+        mantissa overflows is halved to renormalize, which carries it onto the
+        finer 2^-bits grid. Asserting the coarser one would fail on exactly the
+        products that overflowed.
+        """
+
+        from modules.torch_bpla import _fraction_and_exponent
+
+        for bits in (12, 8):
+            with self.subTest(bits=bits):
+                product = self._multiply(self.a[:4000], self.b[:4000], bits)
+                fraction, _, _ = _fraction_and_exponent(product.float())
+                scaled = fraction * float(1 << bits)
+                torch.testing.assert_close(scaled, scaled.round(), rtol=0, atol=1e-4)

@@ -58,6 +58,18 @@ class TorchBPLAConfig:
     #: floor at T=3, while the reciprocal and reciprocal-square-root tables are
     #: still improving well past it.
     nonlinear_dyadic_terms: int | None = None
+    #: Width of the fixed-point mantissa datapath, including the implicit
+    #: leading one; ``None`` keeps full float32 precision. This is the third
+    #: complexity knob alongside ``prefix_bits`` and ``dyadic_terms``, and it is
+    #: the one the cost model is most sensitive to: at T=2 the multiplier spends
+    #: 92% of its energy on 3T+2 fixed-point additions, and their cost is linear
+    #: in this width.
+    #:
+    #: Narrowing it changes what the method claims. At full width B-PLA
+    #: approximates only the interaction term m1*m2 and carries m1 and m2
+    #: themselves exactly; below it, the operand mantissas are rounded too. That
+    #: is a real weakening and has to be reported as one.
+    mantissa_bits: int | None = None
     #: Reference point each one-dimensional segment is expanded around.
     #: ``auto`` picks per table by measured error at build time; the fixed
     #: choices are ``intercept`` (legacy, expand about x=0), ``left`` (segment
@@ -280,6 +292,21 @@ def bpla_multiply_torch(
     return _compiled("multiply", _bpla_multiply_impl)(a, b, config, shared)
 
 
+def _round_to_mantissa_width(x: torch.Tensor, bits: int | None) -> torch.Tensor:
+    """Round to the resolution of a ``bits``-wide fixed-point mantissa datapath.
+
+    A mantissa held as one implicit integer bit plus ``bits - 1`` fraction bits
+    resolves to 2^-(bits-1). Everything that crosses the adder -- the operand
+    fractions on entry, the interaction term, and the reconstructed mantissa --
+    is held to that grid, because it is the adder width that sets the cost.
+    """
+
+    if bits is None:
+        return x
+    scale = float(1 << (bits - 1))
+    return torch.round(x * scale) / scale
+
+
 def _bpla_multiply_impl(
     a: torch.Tensor,
     b: torch.Tensor,
@@ -292,6 +319,9 @@ def _bpla_multiply_impl(
 
     frac_a, exp_a, sign_a = _fraction_and_exponent(a)
     frac_b, exp_b, sign_b = _fraction_and_exponent(b)
+    # Round on entry: a narrowed unit never sees the discarded bits.
+    frac_a = _round_to_mantissa_width(frac_a, config.mantissa_bits)
+    frac_b = _round_to_mantissa_width(frac_b, config.mantissa_bits)
     segments = 1 << config.prefix_bits
     idx_a = torch.clamp((frac_a * segments).floor().to(torch.long), 0, segments - 1)
     idx_b = torch.clamp((frac_b * segments).floor().to(torch.long), 0, segments - 1)
@@ -318,8 +348,9 @@ def _bpla_multiply_impl(
     # Detecting it costs one zero-comparator per operand and gives B-PLA the
     # same exactness on powers of two that Mitchell-family multiplication has.
     cross = torch.where((frac_a == 0) | (frac_b == 0), torch.zeros_like(cross), cross)
+    cross = _round_to_mantissa_width(cross, config.mantissa_bits)
 
-    mantissa = 1.0 + frac_a + frac_b + cross
+    mantissa = _round_to_mantissa_width(1.0 + frac_a + frac_b + cross, config.mantissa_bits)
     overflow = mantissa >= 2.0
     mantissa = torch.where(overflow, mantissa * 0.5, mantissa)
     exponent = exp_a + exp_b + overflow.to(exp_a.dtype)
