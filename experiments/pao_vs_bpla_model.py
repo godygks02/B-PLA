@@ -58,6 +58,7 @@ from modules.torch_pao import (
 from modules.compute_energy import multiplier_cost_summary
 from modules.torch_fqvit import replace_fqvit_layer_norms
 from modules.torch_smoothquant import SmoothQuantConfig, smooth_model
+from modules.torch_shiftaddllm import load_checkpoint_into as load_shiftaddllm_checkpoint
 from modules.torch_ptq import (
     TorchPTQConfig,
     calibrate_ptq_model,
@@ -86,6 +87,7 @@ BACKENDS = (
     "bpla-float",
     "bpla-dyadic",
     "chen-pam",
+    "shiftaddllm",
 )
 
 #: PAM and its single-constant error compensation are separate backends so one
@@ -155,6 +157,16 @@ FQVIT_BACKEND = "ptq-fqvit"
 #: silently answered with a multiplication-scope run under another label.
 PTQ_SCOPES = ("multiplication",)
 
+#: ShiftAddLLM (You et al., NeurIPS 2024) reparameterizes the block weight
+#: matrices into binary codes with power-of-two scales, offline, with the
+#: authors' quantizer (experiments/shiftaddllm_quantize.py). This backend only
+#: loads that result into the checkpoint, so its forward pass is an ordinary
+#: floating-point one. Its coverage is the block weight matrices alone: QK^T,
+#: PV and the vocabulary projection stay in floating point, where B-PLA's
+#: weighted scope converts QK^T and PV too. GPT-2 and the multiplication scope
+#: only -- the method has no nonlinear counterpart and no ViT port here.
+SHIFTADDLLM_BACKEND = "shiftaddllm"
+
 
 def _bpla_config(args: argparse.Namespace, affine_path: str) -> TorchBPLAConfig:
     return TorchBPLAConfig(
@@ -201,6 +213,21 @@ def convert(
         "calibration_samples": 0,
     }
     if backend == "exact":
+        return record
+
+    if backend == SHIFTADDLLM_BACKEND:
+        if not is_gpt2 or scope != "multiplication":
+            raise ValueError("The shiftaddllm backend covers GPT-2 at the multiplication scope only.")
+        meta, replaced = load_shiftaddllm_checkpoint(
+            model,
+            args.shiftaddllm_weights,
+            expected_model_id=args.gpt2_model_id,
+            allow_partial=args.shiftaddllm_allow_partial,
+        )
+        record["linear_modules"] = replaced
+        # attention_blocks stays 0: QK^T and PV are not weight matrices, and
+        # ShiftAddLLM leaves them in floating point.
+        record["shiftaddllm"] = {"checkpoint": str(args.shiftaddllm_weights), **meta}
         return record
 
     if backend in PTQ_GRANULARITY:
@@ -867,6 +894,18 @@ def parse_args() -> argparse.Namespace:
         help="PAO error-compensation constant (Sec. 2.7), used by the pao-alpha backend. "
              "The plain pao backend never applies it, as in the paper.",
     )
+    parser.add_argument(
+        "--shiftaddllm-weights",
+        type=Path,
+        default=None,
+        help="Checkpoint written by experiments/shiftaddllm_quantize.py; required by "
+             "the shiftaddllm backend.",
+    )
+    parser.add_argument(
+        "--shiftaddllm-allow-partial",
+        action="store_true",
+        help="Smoke tests only: accept a checkpoint that quantized fewer than all blocks.",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--device",
@@ -942,6 +981,24 @@ def main() -> None:
                 f"The W8A8 backends have no {unsupported} scope; W8A8 leaves the nonlinear "
                 "paths in floating point. Run them with --scopes multiplication."
             )
+    if SHIFTADDLLM_BACKEND in args.backends:
+        if args.models != ["gpt2"] or args.scopes != ["multiplication"]:
+            raise SystemExit(
+                "The shiftaddllm backend runs with --models gpt2 --scopes multiplication only."
+            )
+        if args.shiftaddllm_weights is None or not args.shiftaddllm_weights.is_file():
+            raise SystemExit(
+                f"--shiftaddllm-weights {args.shiftaddllm_weights} does not exist; create it "
+                "with experiments/shiftaddllm_quantize.py."
+            )
+        record["notes"].append(  # type: ignore[union-attr]
+            "shiftaddllm loads block weights reparameterized offline by the authors' "
+            "quantizer (You et al., NeurIPS 2024) via experiments/shiftaddllm_quantize.py; "
+            "its forward pass is floating point. QK^T, PV and the vocabulary projection "
+            "stay in floating point, unlike B-PLA's weighted scope, which converts QK^T "
+            "and PV. Its calibration is the authors' recipe: 128 windows of the "
+            "WikiText-2 training split."
+        )
 
     for model_name in args.models:
         is_gpt2 = model_name == "gpt2"

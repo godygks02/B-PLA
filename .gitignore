@@ -31,3 +31,6 @@ Thumbs.db
 # Generated paper figures are build products of the scripts beside them, not
 # reference PDFs; the blanket *.pdf rule above is aimed at the latter.
 !experiments/fig_*.pdf
+
+# Third-party sources fetched by script (fetch_shiftaddllm.sh), not vendored
+third_party/

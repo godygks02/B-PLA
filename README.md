@@ -85,6 +85,42 @@ python -m unittest tests.test_ptq
 bash run_ptq.sh          # matched 6-backend run, multiplication scope
 ```
 
+## ShiftAddLLM Baseline (GPT-2)
+
+ShiftAddLLM (You et al., NeurIPS 2024) is the closest published post-training
+multiplication-less method: it rewrites each block weight matrix as binary
+codes with power-of-two scales, calibrated GPTQ-style, with no training. The
+authors ship no GPT-2 script, so `modules/torch_shiftaddllm.py` ports their
+block walk and imports their quantizer unchanged from a pinned clone
+(`./fetch_shiftaddllm.sh`, commit `1053837`). The port is checked against the
+paper by quantizing OPT-125M, which their scripts support, and comparing
+WikiText-2 perplexity with their Table 2.
+
+```bash
+./fetch_shiftaddllm.sh && pip install primefac scipy
+python experiments/shiftaddllm_quantize.py --model gpt2 --mode lat --wbits 3 --seed 0 \
+    --official-eval --output results/shiftaddllm_weights/gpt2_lat3_s0.pt
+python experiments/pao_vs_bpla_model.py --models gpt2 --backends exact shiftaddllm \
+    --scopes multiplication --gpt2-sequence-length 256 --gpt2-target-tokens 300000 \
+    --stream-metrics --shiftaddllm-weights results/shiftaddllm_weights/gpt2_lat3_s0.pt \
+    --output results/shiftaddllm_gpt2_lat3_s0.json
+BPLA_GPUS=0,1,2,3 ./run_vast_shiftaddllm.sh   # OPT-125M check + GPT-2 {acc,lat}x{3,2}bit x 3 seeds
+python report_shiftaddllm.py --latex
+```
+
+Three things the table has to state:
+
+- `--mode acc` rotates each weight by random orthogonal butterflies before
+  binarizing and rotates it back afterwards, so the evaluated weights are
+  dense floats. Only `--mode lat` evaluates true binary codes, the form the
+  authors' LUT kernel runs. Each checkpoint records which it is
+  (`binary_code_check`).
+- ShiftAddLLM converts the block weight matrices only; `QK^T`, `PV` and the
+  vocabulary projection stay in floating point. B-PLA's weighted scope also
+  converts `QK^T` and `PV`.
+- Calibration is the authors' recipe (128 windows of the WikiText-2 training
+  split), not the two evaluation-split windows the other backends get.
+
 ## Table Construction and Replacement Scope
 
 Three `TorchBPLAConfig` fields control how coefficient tables are built. The
