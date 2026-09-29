@@ -123,27 +123,46 @@ def import_upstream(root: str | os.PathLike | None = None):
 
 
 @contextlib.contextmanager
-def cpu_fallback() -> Iterator[bool]:
-    """Let the CUDA-only upstream quantizer run on a CPU, for smoke tests only.
+def upstream_cuda_calls_on_cpu() -> Iterator[None]:
+    """Run the upstream quantizer on the CPU by making its CUDA calls no-ops.
 
     The upstream code calls ``tensor.cuda()``, ``torch.cuda.synchronize()`` and
-    ``torch.cuda.empty_cache()`` unconditionally. On a machine without CUDA
-    these become no-ops for the duration of the block, so the port can be
-    exercised end to end on a laptop. With CUDA present nothing is touched.
-    Results produced this way are marked ``cpu_smoke`` and are never reported.
+    ``torch.cuda.empty_cache()`` unconditionally. Inside this block they leave
+    the tensor where it is and do nothing. Only the quantizer runs inside it;
+    calibration forward passes stay on the GPU.
+
+    Why run it on a CPU at all: ``quantize_shift`` refines one column at a
+    time with thousands of tiny operations, so on a GPU it is bound by kernel
+    launches. On the vast.ai box one 768-row column took 72 ms on one CPU
+    thread against 270-370 ms on an RTX 4060 Ti, with bit-identical output,
+    and a CPU-side job leaves the GPU free for the next one.
     """
 
-    if torch.cuda.is_available():
-        yield False
-        return
     saved = (torch.Tensor.cuda, torch.cuda.synchronize, torch.cuda.empty_cache)
     torch.Tensor.cuda = lambda self, *args, **kwargs: self  # type: ignore[method-assign]
     torch.cuda.synchronize = lambda *args, **kwargs: None  # type: ignore[assignment]
     torch.cuda.empty_cache = lambda *args, **kwargs: None  # type: ignore[assignment]
     try:
-        yield True
+        yield
     finally:
         torch.Tensor.cuda, torch.cuda.synchronize, torch.cuda.empty_cache = saved  # type: ignore[method-assign]
+
+
+@contextlib.contextmanager
+def cpu_fallback() -> Iterator[bool]:
+    """On a machine without CUDA, route the upstream CUDA calls to the CPU.
+
+    This is what lets the port run end to end on a laptop; with CUDA present
+    nothing is touched. Results from such a run are marked ``cpu_smoke``:
+    the whole pipeline, calibration included, ran on a CPU, which is only
+    ever done for smoke tests.
+    """
+
+    if torch.cuda.is_available():
+        yield False
+        return
+    with upstream_cuda_calls_on_cpu():
+        yield True
 
 
 def upstream_args(
@@ -347,6 +366,7 @@ def quantize_model(
     model_name: str,
     batch_size: int = 8,
     max_blocks: int | None = None,
+    quantizer_device: str | torch.device | None = None,
     log: Callable[[str], None] = print,
 ) -> list[dict[str, object]]:
     """Quantize every weight matrix of every block, block by block, in place.
@@ -357,9 +377,17 @@ def quantize_model(
     quantized only after all of them have been observed, as upstream does.
     Batching the calibration windows changes nothing: ``add_batch`` counts
     sequences and sums ``x x^T`` over every token either way.
+
+    ``quantizer_device="cpu"`` collects the Hessians on the model's device,
+    then moves the block and its Hessians to the CPU for the upstream
+    quantizer and back afterwards (see ``upstream_cuda_calls_on_cpu``).
     """
 
     device = next(model.parameters()).device
+    qdevice = torch.device(quantizer_device) if quantizer_device is not None else device
+    move = qdevice != device
+    if move and qdevice.type != "cpu":
+        raise ValueError("quantizer_device may only differ from the model's device to be 'cpu'.")
     use_cache = getattr(model.config, "use_cache", None)
     if use_cache is not None:
         model.config.use_cache = False
@@ -405,17 +433,26 @@ def quantize_model(
 
         for name in subset:
             methods[name].post_batch()
-        for name in subset:
-            method = methods[name]
-            method.preproc(
-                preproc_gptqH=args.pre_gptqH,
-                percdamp=args.percdamp,
-                preproc_rescale=args.pre_rescale,
-                preproc_proj=args.pre_proj,
-                preproc_proj_extra=args.pre_proj_extra,
-            )
-            method.fasterquant(args, model_name=model_name, layer_name=f"{index}.{name}")
-            method.free()
+        if move:
+            block.to(qdevice)
+            for method in methods.values():
+                method.H = method.H.to(qdevice)
+                method.dev = qdevice
+        context = upstream_cuda_calls_on_cpu() if move else contextlib.nullcontext()
+        with context:
+            for name in subset:
+                method = methods[name]
+                method.preproc(
+                    preproc_gptqH=args.pre_gptqH,
+                    percdamp=args.percdamp,
+                    preproc_rescale=args.pre_rescale,
+                    preproc_proj=args.pre_proj,
+                    preproc_proj_extra=args.pre_proj_extra,
+                )
+                method.fasterquant(args, model_name=model_name, layer_name=f"{index}.{name}")
+                method.free()
+        if move:
+            block.to(device)
         seconds = time.perf_counter() - started
         report.append({"block": index, "sublayers": list(subset), "seconds": seconds})
         log(f"block {index}: quantized {len(subset)} matrices in {seconds:.1f} s")

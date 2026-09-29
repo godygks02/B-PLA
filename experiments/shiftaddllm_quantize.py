@@ -91,7 +91,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--upstream", default=None, help="ShiftAddLLM clone (default third_party/ShiftAddLLM).")
     parser.add_argument("--allow-other-commit", action="store_true",
                         help=f"Run even if the clone is not at {UPSTREAM_COMMIT[:12]}.")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu",
+                        help="Device for the model and the calibration forward passes.")
+    parser.add_argument("--quantizer-device", choices=("cpu", "cuda"), default="cpu",
+                        help="Device the authors' per-column quantizer runs on. Its thousands of "
+                             "tiny operations per column are launch-bound on a GPU: 72 ms per "
+                             "768-row column on one CPU thread against 270-370 ms on an RTX 4060 "
+                             "Ti, bit-identical. Hessians are still collected on --device.")
+    parser.add_argument("--cpu-threads", type=int, default=2,
+                        help="torch CPU threads per process; several jobs share one box.")
     parser.add_argument("--output", type=Path, required=True, help="Checkpoint (.pt) to write.")
     parser.add_argument("--report", type=Path, default=None,
                         help="JSON summary to write. Default: the checkpoint path with .json.")
@@ -105,6 +113,7 @@ def main() -> None:
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    torch.set_num_threads(args.cpu_threads)
 
     root = upstream_root(args.upstream)
     commit = upstream_commit(root)
@@ -140,6 +149,7 @@ def main() -> None:
         "dtype": str(next(model.parameters()).dtype),
         "upstream_commit": commit,
         "device": args.device,
+        "quantizer_device": args.quantizer_device if args.device != "cpu" else "cpu",
     }
 
     if args.official_eval:
@@ -178,6 +188,7 @@ def main() -> None:
             model_name=args.model.split("/")[-1],
             batch_size=args.calibration_batch_size,
             max_blocks=args.max_blocks,
+            quantizer_device=args.quantizer_device if args.device != "cpu" else None,
         )
     record["quantize_seconds"] = time.perf_counter() - started
     record["blocks"] = blocks

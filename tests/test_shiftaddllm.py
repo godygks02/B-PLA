@@ -150,7 +150,7 @@ class UpstreamQuantizationTests(unittest.TestCase):
     #: model has to live there too; without CUDA, cpu_fallback() takes over.
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    def _quantize(self, mode: str):
+    def _quantize(self, mode: str, quantizer_device=None):
         torch.manual_seed(0)
         model = _tiny_gpt2().to(self.device)
         conv1d_to_linear(model)
@@ -159,9 +159,20 @@ class UpstreamQuantizationTests(unittest.TestCase):
         with cpu_fallback():
             report = quantize_model(
                 model, calibration, args, self.shiftaddllm, self.bcquantizer,
-                model_name="tiny", batch_size=2, log=lambda _: None,
+                model_name="tiny", batch_size=2, quantizer_device=quantizer_device,
+                log=lambda _: None,
             )
         return model, report
+
+    def test_cpu_quantizer_returns_blocks_to_the_model_device(self):
+        """Hessians on the model's device, the quantizer on the CPU, blocks back."""
+
+        model, report = self._quantize("lat", quantizer_device="cpu")
+        self.assertEqual(len(report), 2)
+        self.assertTrue(all(p.device.type == torch.device(self.device).type for p in model.parameters()))
+        for block in decoder_blocks(model):
+            for module in find_layers(block).values():
+                self.assertTrue(binary_code_check(module.weight.data, 3)["binary_coded"])
 
     def test_lat_weights_are_binary_codes(self):
         model, report = self._quantize("lat")

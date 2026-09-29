@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ShiftAddLLM row of the Table 6 GPT-2 column, on a vast.ai box.
 #
-#   ./run_vast_shiftaddllm.sh                           # GPU 0 only
-#   BPLA_GPUS=0,1,2,3 ./run_vast_shiftaddllm.sh         # jobs dealt over 4 GPUs
+#   ./run_vast_shiftaddllm.sh                           # one worker on GPU 0
+#   BPLA_GPUS=0,0,0,0,0,0,0 ./run_vast_shiftaddllm.sh   # seven workers sharing GPU 0
+#   BPLA_GPUS=0,1,2,3 ./run_vast_shiftaddllm.sh         # one worker per GPU
 #   SAL_CONFIGS="lat3 acc3" SAL_SEEDS=0 ./run_vast_shiftaddllm.sh   # a subset
 #   SAL_DRY_RUN=1 ./run_vast_shiftaddllm.sh             # print the plan only
 #
@@ -21,11 +22,16 @@
 # The seed moves the 128 calibration windows and, for Acc., the random
 # rotations; three seeds give a spread instead of one draw.
 #
-# Nothing here is emulated. The quantizer runs once per job and the scored
-# model is an ordinary floating-point GPT-2 with replaced weights, so a job is
-# minutes of quantization plus about a minute of scoring on one GPU. The
-# first job's log gives the real figure for the rented card. Any 12 GB card
-# is enough: GPT-2 calibration is 128 x 1024 tokens.
+# Nothing here is emulated: the scored model is an ordinary floating-point
+# GPT-2 with replaced weights, about a minute per job on the GPU. The time is
+# in the authors' quantizer, which refines one column at a time with
+# thousands of tiny operations. That is launch-bound on a GPU, so it runs on
+# the CPU (--quantizer-device cpu: 72 ms per 768-row column on one thread
+# against 270-370 ms on an RTX 4060 Ti, bit-identical) while calibration stays
+# on the GPU. A worker needs about two CPU threads and 1.5 GB of GPU memory,
+# so several can share one card: list the same index several times in
+# BPLA_GPUS. On the 48-core, 16 GB RTX 4060 Ti box, seven workers get one
+# Acc. and one Lat. job each.
 #
 # Outputs (results/ is copied back afterwards):
 #   results/shiftaddllm_weights/<model>_<cfg>_s<seed>.{pt,json}  checkpoint + quantize report
@@ -75,7 +81,7 @@ quantize() {
   [ "$DRY" = 1 ] && return 0
   if CUDA_VISIBLE_DEVICES="$gpu" python experiments/shiftaddllm_quantize.py \
         --model "$model" --mode "$mode" --wbits "$bits" --seed "$seed" \
-        --official-eval --device cuda \
+        --official-eval --device cuda --quantizer-device cpu --cpu-threads 2 \
         --output "$WEIGHTS/$name.partial.pt" --report "$WEIGHTS/$name.partial.json" \
         >"$log" 2>&1; then
     mv "$WEIGHTS/$name.partial.pt" "$WEIGHTS/$name.pt"
@@ -126,10 +132,17 @@ run_job() {
   fi
 }
 
-JOBS=("opt:acc3:0" "opt:lat3:0")
-for seed in "${SEEDS[@]}"; do
-  for config in "${CONFIGS[@]}"; do
-    JOBS+=("gpt2:${config}:${seed}")
+# Longest first: every Acc. job (a refinement per column, several times the
+# work of Lat., which refines once per eight columns) before every Lat. job.
+# Dealt round-robin over N workers, the first N jobs are the long ones, so no
+# worker ends up with two of them while another idles.
+JOBS=()
+for mode in acc lat; do
+  JOBS+=("opt:${mode}3:0")
+  for seed in "${SEEDS[@]}"; do
+    for config in "${CONFIGS[@]}"; do
+      if [ "${config%?}" = "$mode" ]; then JOBS+=("gpt2:${config}:${seed}"); fi
+    done
   done
 done
 
