@@ -146,9 +146,13 @@ class UpstreamQuantizationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.shiftaddllm, cls.bcquantizer = import_upstream()
 
+    #: Upstream moves its working tensors to CUDA whenever CUDA exists, so the
+    #: model has to live there too; without CUDA, cpu_fallback() takes over.
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     def _quantize(self, mode: str):
         torch.manual_seed(0)
-        model = _tiny_gpt2()
+        model = _tiny_gpt2().to(self.device)
         conv1d_to_linear(model)
         calibration = [torch.randint(0, 64, (1, 32)) for _ in range(4)]
         args = upstream_args(mode, 3, bcq_round=2)
@@ -168,7 +172,7 @@ class UpstreamQuantizationTests(unittest.TestCase):
                 self.assertTrue(result["conclusive"])
                 self.assertTrue(result["binary_coded"])
         with torch.no_grad():
-            self.assertTrue(torch.isfinite(model(torch.randint(0, 64, (1, 16))).logits).all())
+            self.assertTrue(torch.isfinite(model(torch.randint(0, 64, (1, 16), device=self.device)).logits).all())
 
     def test_acc_weights_are_rotated_back_to_dense(self):
         """--acc binarizes in a rotated basis and undoes the rotation afterwards."""
@@ -182,7 +186,7 @@ class UpstreamQuantizationTests(unittest.TestCase):
         self.assertTrue(all(r["conclusive"] for r in results))
         self.assertTrue(all(not r["binary_coded"] for r in results))
         with torch.no_grad():
-            self.assertTrue(torch.isfinite(model(torch.randint(0, 64, (1, 16))).logits).all())
+            self.assertTrue(torch.isfinite(model(torch.randint(0, 64, (1, 16), device=self.device)).logits).all())
 
 
 if __name__ == "__main__":
