@@ -9,6 +9,7 @@ class of B-PLA approximation?"
 
 from __future__ import annotations
 
+import math
 import os
 import warnings
 from dataclasses import dataclass
@@ -62,8 +63,8 @@ class TorchBPLAConfig:
     #: leading one; ``None`` keeps full float32 precision. This is the third
     #: complexity knob alongside ``prefix_bits`` and ``dyadic_terms``, and it is
     #: the one the cost model is most sensitive to: at T=2 the multiplier spends
-    #: 92% of its energy on 3T+2 fixed-point additions, and their cost is linear
-    #: in this width.
+    #: over 90% of its energy on its 2T+3 fixed-point additions, and their cost
+    #: is linear in this width.
     #:
     #: Narrowing it changes what the method claims. At full width B-PLA
     #: approximates only the interaction term m1*m2 and carries m1 and m2
@@ -75,6 +76,38 @@ class TorchBPLAConfig:
     #: choices are ``intercept`` (legacy, expand about x=0), ``left`` (segment
     #: start) and ``mid`` (segment centre).
     anchor_mode: str = "auto"
+    #: How each one-dimensional segment's anchor constant is stored. ``fixed``
+    #: (the default) holds it on the ``mantissa_bits`` datapath grid like any
+    #: other addend, which at full width is the exact float32 constant; ``spt``
+    #: quantizes it to ``nonlinear_dyadic_terms`` signed power-of-two terms,
+    #: the same representation as the slope, which is what every run before
+    #: 2026-09-11 did. SPT is applied to the slope alone because only the
+    #: slope multiplies the operand; the constant is only ever added, so the
+    #: SPT form saves no shift-add -- at T=4 its 4 x 6 bits are exactly a
+    #: 24-bit fixed-point word -- while it is the whole SPT penalty of the
+    #: reciprocal and rsqrt tables (4.4x and 2.2x at k=4, T=4) and a tenth of
+    #: GELU's. Pass ``spt`` to reproduce the older combined-scope runs.
+    anchor_constant: str = "fixed"
+    #: Zero the interaction term when either operand has a zero fraction, which
+    #: makes products by a power of two exact. This does not follow from the
+    #: centre plane: a zero fraction sits in tile 0, whose centre is
+    #: ``2^-(k+1)``, so the residual ``(0 - mu)(m2 - nu)`` would not vanish.
+    #: It is an addition of ours, worth one zero-comparator per operand.
+    #:
+    #: Turn it off to reproduce Chen et al.'s PAM exactly. Their Eq. (24)
+    #: carries no such special case, so leaving it on would report their
+    #: multiplier as more accurate than it is.
+    power_of_two_exact: bool = True
+    #: Apply a *constant* that is an exact power of two -- the 1/sqrt(64) = 2^-3
+    #: attention scale -- as the exponent shift it is in any hardware, instead
+    #: of routing it through the approximate multiplier. Data-dependent products
+    #: are unaffected. This matters only when ``power_of_two_exact`` is off:
+    #: with the bypass on, the multiplier already returns the exact result for
+    #: that operand, so the two settings agree. Without it, every attention
+    #: score picks up centre-plane error immediately before Softmax, which
+    #: penalised the Chen-PAM row for something a PAM deployment would never
+    #: do -- no accelerator multiplies by 2^-3 with its approximate unit.
+    exact_power_of_two_constants: bool = False
 
 
 AttentionMode = Literal["exact", "bpla-qk", "bpla-pv", "bpla-full"]
@@ -187,6 +220,8 @@ def _validate_config(config: TorchBPLAConfig) -> None:
         raise ValueError("multiplier_form must be 'separable' or 'plane'.")
     if config.anchor_mode not in {"auto", "intercept", "left", "mid"}:
         raise ValueError("anchor_mode must be 'auto', 'intercept', 'left' or 'mid'.")
+    if config.anchor_constant not in {"spt", "fixed"}:
+        raise ValueError("anchor_constant must be 'spt' or 'fixed'.")
     if config.affine_path not in {"float", "dyadic"}:
         raise ValueError("affine_path must be 'float' or 'dyadic'.")
     if config.dyadic_terms <= 0:
@@ -224,10 +259,37 @@ def _maybe_dyadic_nonlinear(values: torch.Tensor, config: TorchBPLAConfig) -> to
     return _maybe_dyadic(values, _nonlinear_config(config))
 
 
+def _anchor_constant(values: torch.Tensor, config: TorchBPLAConfig) -> torch.Tensor:
+    """Store a segment's anchor constant the way ``config.anchor_constant`` says.
+
+    The slope is a multiplicative coefficient and has to be SPT to keep the
+    product a shift-add; the anchor constant is only added, so it can sit on
+    the datapath grid at no arithmetic cost. ``spt`` keeps the legacy
+    representation, ``fixed`` rounds to ``mantissa_bits`` (identity at full
+    width), and the float coefficient path is unaffected either way.
+    """
+
+    if config.anchor_constant == "fixed":
+        return _round_to_mantissa_width(values, config.mantissa_bits)
+    if config.anchor_constant != "spt":
+        # Table builders do not all pass through _validate_config.
+        raise ValueError("anchor_constant must be 'spt' or 'fixed'.")
+    return _maybe_dyadic_nonlinear(values, config)
+
+
 def _maybe_dyadic(values: torch.Tensor, config: TorchBPLAConfig) -> torch.Tensor:
     if config.affine_path == "float":
         return values
     return _signed_pot_quantize(values, config.dyadic_terms, config.max_shift)
+
+
+def _is_power_of_two(value: float) -> bool:
+    """True for +/-2^n, the constants a datapath applies as a bare shift."""
+
+    if not value or not math.isfinite(value):
+        return False
+    mantissa, _ = math.frexp(abs(value))
+    return mantissa == 0.5
 
 
 def _fraction_and_exponent(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -347,7 +409,9 @@ def _bpla_multiply_impl(
     # residual would inject error into a product that is otherwise exact.
     # Detecting it costs one zero-comparator per operand and gives B-PLA the
     # same exactness on powers of two that Mitchell-family multiplication has.
-    cross = torch.where((frac_a == 0) | (frac_b == 0), torch.zeros_like(cross), cross)
+    # Chen et al.'s PAM has no such case, so the baseline row turns this off.
+    if config.power_of_two_exact:
+        cross = torch.where((frac_a == 0) | (frac_b == 0), torch.zeros_like(cross), cross)
     cross = _round_to_mantissa_width(cross, config.mantissa_bits)
 
     mantissa = _round_to_mantissa_width(1.0 + frac_a + frac_b + cross, config.mantissa_bits)
@@ -482,7 +546,7 @@ def _select_anchor(
     }
 
     def error_of(anchor_x: torch.Tensor, anchor_y: torch.Tensor) -> float:
-        approx = _maybe_dyadic_nonlinear(anchor_y, config)[index] + quantized_slopes[index] * (
+        approx = _anchor_constant(anchor_y, config)[index] + quantized_slopes[index] * (
             probe - anchor_x[index]
         )
         return float((approx - exact).pow(2).mean())
@@ -495,7 +559,7 @@ def _select_anchor(
     anchor_x, anchor_y = candidates[mode]
     return {
         "anchor_x": anchor_x,
-        "anchor_y": _maybe_dyadic_nonlinear(anchor_y, config),
+        "anchor_y": _anchor_constant(anchor_y, config),
         "anchor_mode": mode,
     }
 
@@ -707,10 +771,16 @@ def replace_attention_matmuls(
         else:
             attention_scores = torch.matmul(query, key.transpose(-1, -2))
         # The 1/sqrt(head_dim) scaling is a multiplication too. It happens to be
-        # a power of two for the models here, which the multiplier now handles
-        # exactly, but that is a property of head_dim=64 rather than of the
-        # method, so it is routed rather than assumed away.
-        if use_bpla_qk:
+        # a power of two for the models here, which the multiplier handles
+        # exactly when the bypass is on, but that is a property of head_dim=64
+        # rather than of the method, so by default it is routed rather than
+        # assumed away. ``exact_power_of_two_constants`` declares it a shift
+        # instead, which is what it is in hardware; multiplying a float by an
+        # exact power of two only touches the exponent, so ``* scaling`` is
+        # that shift bit for bit.
+        if use_bpla_qk and not (
+            config.exact_power_of_two_constants and _is_power_of_two(scaling)
+        ):
             attention_scores = bpla_multiply_torch(
                 attention_scores,
                 torch.full_like(attention_scores, scaling),
@@ -899,7 +969,7 @@ def build_activation_table_torch(
         quantized_slopes = _maybe_dyadic_nonlinear(slopes, config)
 
         def error_of(points: torch.Tensor, values: torch.Tensor) -> float:
-            approx = _maybe_dyadic_nonlinear(values, config)[idx] + quantized_slopes[idx] * (xs - points[idx])
+            approx = _anchor_constant(values, config)[idx] + quantized_slopes[idx] * (xs - points[idx])
             return float((approx - ys).pow(2).mean())
 
         mode = (
@@ -914,7 +984,7 @@ def build_activation_table_torch(
     return {
         "slopes": _maybe_dyadic_nonlinear(slopes, config),
         "anchor_x": anchor_x,
-        "anchor_y": _maybe_dyadic_nonlinear(anchor_y, config),
+        "anchor_y": _anchor_constant(anchor_y, config),
         "anchor_mode": mode,
         "min_e_routing": min_e_routing,
         "max_e_routing": max_e_routing,

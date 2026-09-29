@@ -10,8 +10,9 @@ obvious question: where does B-PLA's energy actually go, and is any of it
 recoverable?
 
 The answer from ``modules/compute_energy.py`` is that at T=2 the multiplier
-spends 92% of its energy on 3T+2 fixed-point additions, whose cost is linear in
-the mantissa datapath width. That width is 24 bits only because float32's
+spends over 90% of its energy on its fixed-point additions -- 2T+3 of them for
+the separable evaluator, 3T+2 for the legacy plane form the earlier figures
+were costed with -- whose cost is linear in the mantissa datapath width. That width is 24 bits only because float32's
 significand is 24 bits -- nothing about the method requires it. This sweep asks
 what accuracy costs at narrower widths, and puts B-PLA, PAM and an int8
 multiplier on one accuracy-versus-energy plane so the trade is visible rather
@@ -84,6 +85,32 @@ def sample_operands(
 
 def relative_rmse(approximate: torch.Tensor, exact: torch.Tensor) -> float:
     return float(approximate.sub(exact).pow(2).mean().sqrt() / exact.pow(2).mean().sqrt())
+
+
+def absolute_relative_error(approximate: torch.Tensor, exact: torch.Tensor) -> torch.Tensor:
+    """Per-product |relative error|, defined exactly as pao_vs_bpla_primitive.py does.
+
+    The two sweeps fill neighbouring rows of the same ablation table, so a
+    column that mixed this script's relative RMSE with that script's worst case
+    would not be readable down the column. Keeping one definition in both is
+    what makes the datapath rows comparable to the prefix-width and term-budget
+    rows.
+    """
+
+    tiny = torch.finfo(exact.dtype).tiny
+    safe = torch.where(exact.abs() < tiny, torch.full_like(exact, tiny), exact)
+    return ((approximate - exact) / safe).abs()
+
+
+def error_summary(approximate: torch.Tensor, exact: torch.Tensor) -> dict[str, float]:
+    """Relative RMSE plus the worst case and p99 the ablation table reports."""
+
+    absolute_relative = absolute_relative_error(approximate, exact)
+    return {
+        "relative_rmse": relative_rmse(approximate, exact),
+        "p99_abs_relative_error": float(torch.quantile(absolute_relative, 0.99)),
+        "max_abs_relative_error": float(absolute_relative.max()),
+    }
 
 
 def gain(approximate: torch.Tensor, exact: torch.Tensor) -> float:
@@ -159,7 +186,7 @@ def main() -> None:
                 "method": "pam",
                 "mantissa_bits": None,
                 "dyadic_terms": None,
-                "relative_rmse": relative_rmse(pam, exact),
+                **error_summary(pam, exact),
                 "gain": gain(pam, exact),
                 "energy_pj": 2 * table.int32_add,
             }
@@ -170,7 +197,7 @@ def main() -> None:
                 "method": "pam-alpha",
                 "mantissa_bits": None,
                 "dyadic_terms": None,
-                "relative_rmse": relative_rmse(
+                **error_summary(
                     pao_multiply_torch(a, b, _alpha_config()).double(), exact
                 ),
                 "gain": gain(pao_multiply_torch(a, b, _alpha_config()).double(), exact),
@@ -184,7 +211,7 @@ def main() -> None:
                 "method": "int8",
                 "mantissa_bits": 8,
                 "dyadic_terms": None,
-                "relative_rmse": relative_rmse(int8, exact),
+                **error_summary(int8, exact),
                 "gain": gain(int8, exact),
                 "energy_pj": table.int8_mul,
             }
@@ -213,7 +240,7 @@ def main() -> None:
                         "method": "bpla-dyadic",
                         "mantissa_bits": bits,
                         "dyadic_terms": terms,
-                        "relative_rmse": relative_rmse(approximate, exact),
+                        **error_summary(approximate, exact),
                         "gain": gain(approximate, exact),
                         "energy_pj": energy["total_pj"],
                         "energy_vs_int8": energy["total_pj"] / table.int8_mul,
@@ -222,6 +249,7 @@ def main() -> None:
                 print(
                     f"[{distribution}] T={terms} mantissa={bits:2d}  "
                     f"rel_rmse={results[-1]['relative_rmse']:.4e}  "
+                    f"max|rel|={results[-1]['max_abs_relative_error']:.4e}  "
                     f"gain={results[-1]['gain']:.6f}  "
                     f"{energy['total_pj']:.3f} pJ "
                     f"({energy['total_pj'] / table.int8_mul:.2f}x int8)",

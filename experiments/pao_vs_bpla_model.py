@@ -55,7 +55,9 @@ from modules.torch_pao import (
     replace_pao_layer_norms,
     replace_pao_linear_and_gelu,
 )
+from modules.compute_energy import multiplier_cost_summary
 from modules.torch_fqvit import replace_fqvit_layer_norms
+from modules.torch_smoothquant import SmoothQuantConfig, smooth_model
 from modules.torch_ptq import (
     TorchPTQConfig,
     calibrate_ptq_model,
@@ -77,10 +79,13 @@ BACKENDS = (
     "ptq-w8a8",
     "ptq-w8a8-static",
     "ptq-fqvit",
+    "ptq-smoothquant",
+    "ptq-smoothquant-static",
     "pao",
     "pao-alpha",
     "bpla-float",
     "bpla-dyadic",
+    "chen-pam",
 )
 
 #: PAM and its single-constant error compensation are separate backends so one
@@ -100,10 +105,38 @@ PAO_BACKENDS = {"pao", "pao-alpha"}
 PTQ_GRANULARITY = {
     "ptq-w8a8": "token",
     "ptq-w8a8-static": "tensor",
+    # SmoothQuant is a W8A8 row with the activation-outlier migration of Xiao et
+    # al. (ICML 2023) applied first. Both granularities are offered because they
+    # answer different questions and the method's own paper is about the second.
+    #
+    # ``ptq-smoothquant`` is the O1 setting: migration on top of dynamic
+    # per-token scales. Per-token scaling already survives outliers on its own --
+    # experiments/activation_outliers.json puts it at 92.11% agreement against
+    # 68.28% for per-tensor min-max on GPT-2 -- so the migration has little left
+    # to recover and the row mostly shows that.
+    #
+    # ``ptq-smoothquant-static`` is the setting SmoothQuant exists for: static
+    # per-tensor activation scales, where a single outlier channel otherwise
+    # ruins the scale for the whole tensor. Reporting only the first would
+    # understate the method and leave the W8A8 rows open to the straw-man
+    # charge; reporting only the second would hide that our per-token row was
+    # already strong.
+    "ptq-smoothquant": "token",
+    "ptq-smoothquant-static": "tensor",
     # FQ-ViT quantizes activations layer-wise with a min-max observer, which is
     # our per-tensor setting with the percentile clipping turned off.
     "ptq-fqvit": "tensor",
 }
+
+#: The backends that need the SmoothQuant front-end before quantization.
+SMOOTHQUANT_BACKENDS = {"ptq-smoothquant", "ptq-smoothquant-static"}
+
+#: Backends whose weighted-scope product has an arithmetic cost model in
+#: ``modules.compute_energy``: the tile-centre plane at level k (Chen-PAM), its
+#: SPT form at (k, T, B), and the float-coefficient ceiling. Each result row
+#: for these carries the per-product cost beside its fidelity so the
+#: accuracy-cost trade can be read from the artifact alone.
+COSTED_BACKENDS = {"chen-pam", "bpla-dyadic", "bpla-float"}
 
 #: FQ-ViT (Lin et al., IJCAI 2022) is the only training-free method that reaches
 #: the nonlinear operators, so it is the one baseline that has a combined-scope
@@ -133,6 +166,7 @@ def _bpla_config(args: argparse.Namespace, affine_path: str) -> TorchBPLAConfig:
         mantissa_bits=args.mantissa_bits,
         activation_range=args.activation_range,
         linear_chunk_out=args.linear_chunk_out,
+        anchor_constant=args.anchor_constant,
     )
 
 
@@ -187,6 +221,22 @@ def convert(
             activation_granularity=PTQ_GRANULARITY[backend],
             softmax_log2_bits=args.fqvit_softmax_bits if is_fqvit else None,
         )
+        if backend in SMOOTHQUANT_BACKENDS:
+            # Migration runs on the still-exact model, so the channel profile is
+            # the one the unquantized checkpoint produces, and it must happen
+            # before the modules are swapped for their quantized forms.
+            start = time.perf_counter()
+            record.update(
+                smooth_model(
+                    model,
+                    args.calibration_inputs,
+                    lambda module, batch: module(**batch),
+                    args.calibration_batches,
+                    SmoothQuantConfig(alpha=args.smoothquant_alpha),
+                    is_gpt2,
+                )
+            )
+            record["smoothquant_seconds"] = time.perf_counter() - start
         if is_gpt2:
             record["linear_modules"] = replace_ptq_gpt2_conv1d(
                 model, config, replace_lm_head=args.replace_lm_head
@@ -264,7 +314,31 @@ def convert(
             record["layernorm_modules"] = replace_pao_layer_norms(model, config)
         return record
 
-    config = _bpla_config(args, "float" if backend == "bpla-float" else "dyadic")
+    # Chen et al.'s PAM (IEEE TC 2022) is the exact-coefficient centre plane: their
+    # Eq. (6) minimises the squared error over the tile and returns
+    # [k0, k1, k2] = [-x_hat*y_hat, y_hat, x_hat], which is Eq. (10) of this paper.
+    # PAM Level i partitions into 4^i sub-domains, so Level i corresponds to k = i.
+    # The one thing that must be switched off is our power-of-two bypass, which
+    # PAM's Eq. (24) has no counterpart for.
+    is_chen_pam = backend == "chen-pam"
+    config = _bpla_config(
+        args, "float" if backend in {"bpla-float", "chen-pam"} else "dyadic"
+    )
+    if is_chen_pam:
+        # No bypass (their Eq. (24) has none), but power-of-two *constants* are
+        # shifts in any datapath, PAM's included. Routing the 2^-3 attention
+        # scale through the approximate plane charged PAM for an error no PAM
+        # deployment would incur; every other backend here already gets that
+        # multiply exactly (Mitchell for PAO, the bypass for B-PLA).
+        config = TorchBPLAConfig(**{**config.__dict__,
+                                    "power_of_two_exact": False,
+                                    "exact_power_of_two_constants": True})
+        record["chen_pam_level"] = args.prefix_bits
+    if args.exact_pot_constants and not config.exact_power_of_two_constants:
+        config = TorchBPLAConfig(**{**config.__dict__, "exact_power_of_two_constants": True})
+    record["exact_power_of_two_constants"] = bool(config.exact_power_of_two_constants)
+    record["power_of_two_exact"] = bool(config.power_of_two_exact)
+    record["anchor_constant"] = config.anchor_constant
     tables = SharedBPLATables(config)
 
     if replace_nonlinear and args.calibrate_activation:
@@ -340,23 +414,56 @@ def prepare_vit_batches(args: argparse.Namespace) -> list[dict[str, torch.Tensor
     from transformers import ViTImageProcessor
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from torch_bpla_vit_probe import IMAGENETTE_TO_IMAGENET
+
+    # Imagenette labels index its own ten classes, so they have to be lifted into
+    # the checkpoint's 1000-way space. A full ImageNet-1k split already uses that
+    # space; remapping it would silently score against the wrong classes, and the
+    # top-1 would look plausible rather than obviously broken.
+    remap_imagenette = "imagenette" in args.vit_dataset_id.lower()
+    if remap_imagenette:
+        from torch_bpla_vit_probe import IMAGENETTE_TO_IMAGENET
+    else:
+        IMAGENETTE_TO_IMAGENET = None
 
     processor = ViTImageProcessor.from_pretrained(args.vit_model_id)
-    raw = load_dataset(args.vit_dataset_id)
-    if "validation" in raw:
-        split = raw["validation"]
-    elif "test" in raw:
-        split = raw["test"]
-    else:
-        split = raw["train"].train_test_split(test_size=0.3, seed=42)["test"]
+
+    # Ask for one split by name. ``load_dataset(id)`` with no split materialises
+    # every split, and for ImageNet-1k that is roughly 150 GB of training images
+    # this experiment never scores. Only the held-out split is ever read.
+    candidates = [args.vit_split] if args.vit_split else ["validation", "test"]
+    split, failures = None, []
+    for name in candidates:
+        try:
+            split = load_dataset(args.vit_dataset_id, split=name)
+            break
+        except Exception as error:  # unknown split, or the id has none by that name
+            failures.append(f"{name}: {type(error).__name__}: {error}")
+    if split is None:
+        if args.vit_split:
+            raise ValueError(
+                f"Could not load split {args.vit_split!r} of {args.vit_dataset_id!r}. "
+                + " | ".join(failures)
+            )
+        # No held-out split published: carve one out of train, as before.
+        split = load_dataset(args.vit_dataset_id, split="train").train_test_split(
+            test_size=0.3, seed=42
+        )["test"]
+
+    # A subset has to be drawn across the label space, not off the front of the
+    # file. ImageNet-1k's validation split is stored in class order, so the first
+    # 5,000 images are the first ~100 classes and a top-1 measured on them says
+    # nothing about the checkpoint. Shuffling once with a fixed seed keeps the
+    # draw reproducible and identical across backends.
+    if args.vit_shuffle_seed is not None and args.num_samples < len(split):
+        split = split.shuffle(seed=args.vit_shuffle_seed)
 
     def transform(batch):
         images = [image.convert("RGB") for image in batch["image"]]
         inputs = processor(images, return_tensors="pt")
-        inputs["labels"] = torch.tensor(
-            [IMAGENETTE_TO_IMAGENET[int(label)] for label in batch["label"]], dtype=torch.long
-        )
+        labels = [int(label) for label in batch["label"]]
+        if remap_imagenette:
+            labels = [IMAGENETTE_TO_IMAGENET[label] for label in labels]
+        inputs["labels"] = torch.tensor(labels, dtype=torch.long)
         return inputs
 
     dataset = split.with_transform(transform)
@@ -371,13 +478,43 @@ def prepare_vit_batches(args: argparse.Namespace) -> list[dict[str, torch.Tensor
     return batches
 
 
+def _batch_to(batch: dict[str, torch.Tensor], device: torch.device) -> dict[str, torch.Tensor]:
+    """Move one batch, or return it untouched if it is already there.
+
+    Batches are held in host memory when the evaluation set is large, so every
+    runner moves what it is about to use. ``Tensor.to`` is a no-op when the
+    tensor already lives on ``device``, which keeps the small-dataset path free.
+    """
+
+    return {key: value.to(device, non_blocking=True) for key, value in batch.items()}
+
+
+def _model_device(model: nn.Module) -> torch.device:
+    return next(model.parameters()).device
+
+
 @torch.no_grad()
 def run_vit(model: nn.Module, batches: list[dict[str, torch.Tensor]]) -> dict[str, object]:
     logits = []
     labels = []
-    for batch in batches:
-        logits.append(model(batch["pixel_values"]).logits.float().cpu())
+    device = _model_device(model)
+    # An emulated ViT pass over a full split runs for hours with nothing on the
+    # log between the backend banner and its summary line, so a progress line
+    # goes out every few batches: enough to tell a live job from a hung one and
+    # to project its finish, rare enough not to matter.
+    started = time.perf_counter()
+    for index, batch in enumerate(batches, start=1):
+        pixel_values = batch["pixel_values"].to(device, non_blocking=True)
+        logits.append(model(pixel_values).logits.float().cpu())
         labels.append(batch["labels"].cpu())
+        del pixel_values
+        if index % 8 == 0 or index == len(batches):
+            elapsed = time.perf_counter() - started
+            print(
+                f"    batch {index}/{len(batches)}  {elapsed/60:.1f} min elapsed, "
+                f"~{elapsed / index * (len(batches) - index) / 60:.1f} min left",
+                flush=True,
+            )
     logits_all = torch.cat(logits)
     labels_all = torch.cat(labels)
     top5 = logits_all.topk(5, dim=-1).indices
@@ -427,8 +564,9 @@ def run_gpt2(model: nn.Module, batches: list[dict[str, torch.Tensor]]) -> dict[s
     logits = []
     negative_log_likelihood = 0.0
     token_count = 0
+    device = _model_device(model)
     for batch in batches:
-        input_ids = batch["input_ids"]
+        input_ids = _batch_to(batch, device)["input_ids"]
         output = model(input_ids).logits.float()
         logits.append(output.cpu())
         shift_logits = output[:, :-1, :]
@@ -451,76 +589,153 @@ def run_gpt2(model: nn.Module, batches: list[dict[str, torch.Tensor]]) -> dict[s
 # --------------------------------------------------------------------------- glue
 
 
-def compare_to_reference(current: torch.Tensor, reference: torch.Tensor) -> dict[str, float]:
-    """Compare approximate outputs to the exact ones.
+class FidelityAccumulator:
+    """Running fidelity statistics, fed either all at once or one batch at a time.
 
     Logit metrics are computed on *row-centered* logits. Softmax is invariant to
     a per-row constant, and for GPT-2 that constant carries 99.95% of the raw
     logit energy, so an uncentered gain or MAE mostly measures a shift the model
     never sees. The uncentered figures are still reported, clearly labelled, for
     comparison with work that quotes them.
+
+    Every metric is a ratio of sums, so feeding rows in pieces gives exactly the
+    same answer as one pass over the whole tensor. That is what makes streaming
+    possible, and streaming is what decides whether a full-split run finishes at
+    all: GPT-2 logits are tokens x vocabulary, so one float32 copy of the whole
+    WikiText-2 test split is 54 GiB, and holding the reference beside it -- plus
+    the ``torch.cat`` that materialises each one -- is what the OOM killer
+    reacts to.
     """
 
-    # Accumulated over row chunks rather than over whole float64 copies. Every
-    # metric here is a ratio of sums, so chunking changes nothing but the peak
-    # memory -- and that peak is what decides whether the run finishes: a
-    # language model's logits are tokens x vocabulary, so at 12,800 GPT-2 tokens
-    # one float64 copy is 5.1 GB and the original four-copy form needed roughly
-    # 20 GB to compare a run that had already completed its forward passes.
-    rows = current.shape[0]
-    chunk = max(1, min(rows, _COMPARISON_CHUNK_ELEMENTS // max(1, current.shape[-1])))
-
-    totals = dict.fromkeys(
-        (
-            "elements",
-            "abs_difference",
-            "squared_difference",
-            "squared_reference",
-            "cross",
-            "uncentered_abs_difference",
-            "uncentered_cross",
-            "uncentered_squared_reference",
-        ),
-        0.0,
+    _KEYS = (
+        "elements",
+        "abs_difference",
+        "squared_difference",
+        "squared_reference",
+        "cross",
+        "uncentered_abs_difference",
+        "uncentered_cross",
+        "uncentered_squared_reference",
     )
-    agreements = 0
 
-    for start in range(0, rows, chunk):
-        current_chunk = current[start : start + chunk].double()
-        reference_chunk = reference[start : start + chunk].double()
-        centered_current = current_chunk - current_chunk.mean(dim=-1, keepdim=True)
-        centered_reference = reference_chunk - reference_chunk.mean(dim=-1, keepdim=True)
-        centered_difference = centered_current - centered_reference
+    def __init__(self) -> None:
+        self.totals = dict.fromkeys(self._KEYS, 0.0)
+        self.agreements = 0
+        self.rows = 0
 
-        totals["elements"] += float(current_chunk.numel())
-        totals["abs_difference"] += float(centered_difference.abs().sum())
-        totals["squared_difference"] += float(centered_difference.pow(2).sum())
-        totals["squared_reference"] += float(centered_reference.pow(2).sum())
-        totals["cross"] += float((centered_current * centered_reference).sum())
-        totals["uncentered_abs_difference"] += float((current_chunk - reference_chunk).abs().sum())
-        totals["uncentered_cross"] += float((current_chunk * reference_chunk).sum())
-        totals["uncentered_squared_reference"] += float(reference_chunk.pow(2).sum())
-        agreements += int(
-            (current_chunk.argmax(dim=-1) == reference_chunk.argmax(dim=-1)).sum()
+    def update(self, current: torch.Tensor, reference: torch.Tensor) -> None:
+        rows = current.shape[0]
+        chunk = max(1, min(rows, _COMPARISON_CHUNK_ELEMENTS // max(1, current.shape[-1])))
+        for start in range(0, rows, chunk):
+            current_chunk = current[start : start + chunk].double()
+            reference_chunk = reference[start : start + chunk].double()
+            centered_current = current_chunk - current_chunk.mean(dim=-1, keepdim=True)
+            centered_reference = reference_chunk - reference_chunk.mean(dim=-1, keepdim=True)
+            centered_difference = centered_current - centered_reference
+
+            self.totals["elements"] += float(current_chunk.numel())
+            self.totals["abs_difference"] += float(centered_difference.abs().sum())
+            self.totals["squared_difference"] += float(centered_difference.pow(2).sum())
+            self.totals["squared_reference"] += float(centered_reference.pow(2).sum())
+            self.totals["cross"] += float((centered_current * centered_reference).sum())
+            self.totals["uncentered_abs_difference"] += float(
+                (current_chunk - reference_chunk).abs().sum()
+            )
+            self.totals["uncentered_cross"] += float((current_chunk * reference_chunk).sum())
+            self.totals["uncentered_squared_reference"] += float(reference_chunk.pow(2).sum())
+            self.agreements += int(
+                (current_chunk.argmax(dim=-1) == reference_chunk.argmax(dim=-1)).sum()
+            )
+        self.rows += rows
+
+    def result(self) -> dict[str, float]:
+        elements = self.totals["elements"]
+        mean_squared_difference = self.totals["squared_difference"] / elements
+        mean_squared_reference = self.totals["squared_reference"] / elements
+
+        return {
+            "logit_mae": self.totals["abs_difference"] / elements,
+            "logit_rmse": math.sqrt(mean_squared_difference),
+            "logit_nrmse": math.sqrt(mean_squared_difference) / math.sqrt(mean_squared_reference),
+            "argmax_agreement": 100.0 * self.agreements / self.rows,
+            # The model-level counterpart of the per-product gain: a systematic
+            # contraction shows up here even when the argmax survives.
+            "output_gain": self.totals["cross"] / self.totals["squared_reference"],
+            "uncentered_logit_mae": self.totals["uncentered_abs_difference"] / elements,
+            "uncentered_output_gain": (
+                self.totals["uncentered_cross"] / self.totals["uncentered_squared_reference"]
+            ),
+        }
+
+
+def compare_to_reference(current: torch.Tensor, reference: torch.Tensor) -> dict[str, float]:
+    """Compare approximate outputs to the exact ones, both held in full."""
+
+    accumulator = FidelityAccumulator()
+    accumulator.update(current, reference)
+    return accumulator.result()
+
+
+@torch.no_grad()
+def run_gpt2_streaming(
+    model: nn.Module,
+    reference: nn.Module | None,
+    batches: list[dict[str, torch.Tensor]],
+) -> dict[str, object]:
+    """Score GPT-2 and compare against the exact model without storing logits.
+
+    The exact model is re-run alongside the approximate one so that each batch
+    can be compared and discarded. That costs one extra exact forward pass per
+    backend, which for GPT-2 is about 3 seconds over the whole WikiText-2 split
+    against hours of emulation -- and it is the difference between a run that
+    finishes and one the kernel kills. ``reference`` is None for the exact row,
+    which needs no comparison.
+    """
+
+    accumulator = FidelityAccumulator()
+    negative_log_likelihood = 0.0
+    token_count = 0
+    approximate_seconds = 0.0
+
+    device = _model_device(model)
+    for batch in batches:
+        input_ids = _batch_to(batch, device)["input_ids"]
+
+        started = time.perf_counter()
+        output = model(input_ids).logits.float()
+        if output.is_cuda:
+            torch.cuda.synchronize()
+        approximate_seconds += time.perf_counter() - started
+
+        shift_logits = output[:, :-1, :]
+        shift_labels = input_ids[:, 1:]
+        negative_log_likelihood += float(
+            nn.functional.cross_entropy(
+                shift_logits.reshape(-1, shift_logits.size(-1)),
+                shift_labels.reshape(-1),
+                reduction="sum",
+            )
         )
+        token_count += int(shift_labels.numel())
 
-    elements = totals["elements"]
-    mean_squared_difference = totals["squared_difference"] / elements
-    mean_squared_reference = totals["squared_reference"] / elements
+        if reference is not None:
+            exact = reference(input_ids).logits.float()
+            accumulator.update(
+                output.reshape(-1, output.size(-1)),
+                exact.reshape(-1, exact.size(-1)),
+            )
+            del exact
+        del output
 
-    return {
-        "logit_mae": totals["abs_difference"] / elements,
-        "logit_rmse": math.sqrt(mean_squared_difference),
-        "logit_nrmse": math.sqrt(mean_squared_difference) / math.sqrt(mean_squared_reference),
-        "argmax_agreement": 100.0 * agreements / rows,
-        # The model-level counterpart of the per-product gain: a systematic
-        # contraction shows up here even when the argmax survives.
-        "output_gain": totals["cross"] / totals["squared_reference"],
-        "uncentered_logit_mae": totals["uncentered_abs_difference"] / elements,
-        "uncentered_output_gain": (
-            totals["uncentered_cross"] / totals["uncentered_squared_reference"]
-        ),
+    outcome: dict[str, object] = {
+        "perplexity": math.exp(negative_log_likelihood / token_count),
+        "tokens": token_count,
+        "samples": len(batches),
+        "approximate_forward_seconds": approximate_seconds,
     }
+    if reference is not None:
+        outcome["streamed_metrics"] = accumulator.result()
+    return outcome
 
 
 def parse_args() -> argparse.Namespace:
@@ -531,6 +746,29 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--vit-model-id", default="google/vit-base-patch16-224")
     parser.add_argument("--vit-dataset-id", default="johnowhitaker/imagenette2-320")
+    parser.add_argument(
+        "--max-resident-batch-gb",
+        type=float,
+        default=4.0,
+        help="Evaluation sets larger than this stay in host memory and are moved to "
+             "the device one batch at a time. ImageNet-1k preprocesses to about 29 GB, "
+             "which would otherwise sit on the device for the whole run.",
+    )
+    parser.add_argument(
+        "--vit-shuffle-seed",
+        type=int,
+        default=None,
+        help="Shuffle the ViT split with this seed before taking --num-samples. "
+             "Required for any subset of ImageNet-1k, whose validation split is "
+             "stored in class order: the first N images would otherwise cover only "
+             "the first N/50 classes. Ignored when the whole split is used.",
+    )
+    parser.add_argument(
+        "--vit-split",
+        default=None,
+        help="Dataset split to score. Default tries 'validation' then 'test'. "
+             "Only this split is downloaded.",
+    )
     parser.add_argument("--num-samples", type=int, default=64)
     parser.add_argument("--batch-size", type=int, default=4)
 
@@ -558,6 +796,27 @@ def parse_args() -> argparse.Namespace:
              "most of its energy on additions whose cost is linear in this width.",
     )
     parser.add_argument("--activation-range", type=float, default=4.0)
+    parser.add_argument(
+        "--anchor-constant",
+        choices=("fixed", "spt"),
+        default="fixed",
+        help="Storage of each nonlinear segment's anchor constant. 'fixed' (default "
+             "since 2026-09-11) keeps it on the --mantissa-bits datapath grid, which "
+             "at full width is the exact constant: SPT then applies to the slope "
+             "only. 'spt' quantizes it to --nonlinear-dyadic-terms signed "
+             "power-of-two terms like the slope, which reproduces the runs before "
+             "that date. It is only ever added, so 'fixed' removes no shift-add and "
+             "changes only the nonlinear scopes.",
+    )
+    parser.add_argument(
+        "--exact-pot-constants",
+        dest="exact_pot_constants",
+        action="store_true",
+        help="Apply power-of-two constants (the 1/sqrt(64) attention scale) as "
+             "shifts instead of routing them through the approximate multiplier. "
+             "Always on for chen-pam; a no-op for the B-PLA paths, whose bypass "
+             "already makes that product exact.",
+    )
     parser.add_argument("--linear-chunk-out", type=int, default=128)
     parser.add_argument("--calibration-batches", type=int, default=2)
     parser.add_argument("--no-calibrate-activation", dest="calibrate_activation", action="store_false")
@@ -573,6 +832,14 @@ def parse_args() -> argparse.Namespace:
         help="Also convert ViT's patch-embedding convolution.",
     )
     parser.add_argument("--ptq-weight-bits", type=int, default=8)
+    parser.add_argument(
+        "--smoothquant-alpha",
+        type=float,
+        default=0.5,
+        help="SmoothQuant migration strength (Xiao et al., ICML 2023). 0 leaves "
+             "activations untouched, 1 moves the whole outlier into the weights; "
+             "0.5 is the paper's default for OPT-family models.",
+    )
     parser.add_argument(
         "--fqvit-softmax-bits",
         type=int,
@@ -605,6 +872,14 @@ def parse_args() -> argparse.Namespace:
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device for both the model and the evaluation batches.",
+    )
+    parser.add_argument(
+        "--stream-metrics",
+        action="store_true",
+        help="GPT-2 only: compare each batch against a second exact model and discard "
+             "the logits, instead of holding the whole split twice in host memory. "
+             "Required for the full WikiText-2 split, where one float32 copy of the "
+             "logits is 54 GiB. Costs one extra exact forward pass per backend.",
     )
     parser.add_argument(
         "--save-logits",
@@ -647,6 +922,11 @@ def main() -> None:
             "Wall-clock is not reported: neither backend has native hardware support.",
             "Logit metrics are row-centered: softmax ignores a per-row constant, and for "
             "GPT-2 that constant holds 99.95% of the raw logit energy.",
+            "multiplier_cost is the 45 nm arithmetic proxy of modules/compute_energy.py "
+            "for one weighted product: fixed-point additions at the datapath width, "
+            "shifts at zero, no table, register or memory traffic. Chen-PAM at level k "
+            "is costed from Eq. (22) of Chen et al. (ICCAD 2020); B-PLA from the "
+            "separable evaluator nu*m1 + mu*(m2 - nu) with T terms per coefficient.",
         ],
         "results": [],
     }
@@ -671,21 +951,53 @@ def main() -> None:
         else:
             batches = prepare_vit_batches(args)
             builder, runner = build_vit, run_vit
-        batches = [
-            {key: value.to(args.device) for key, value in batch.items()}
+        # The evaluation set stays in host memory and moves one batch at a time.
+        # Pinning it all to the device costs 29 GB of preprocessed tensors at
+        # ImageNet-1k scale -- resident for the whole run, across every backend --
+        # which leaves nothing for the model. The per-batch transfer is a few
+        # seconds of PCIe against hours of emulation.
+        resident = sum(
+            value.numel() * value.element_size()
             for batch in batches
-        ]
+            for value in batch.values()
+        )
+        if resident > args.max_resident_batch_gb * 1024 ** 3:
+            print(
+                f"[{model_name}] evaluation set is {resident / 1024 ** 3:.1f} GiB; "
+                f"streaming batches to {args.device} one at a time",
+                flush=True,
+            )
+        else:
+            batches = [
+                {key: value.to(args.device) for key, value in batch.items()}
+                for batch in batches
+            ]
 
-        # Forward calibration sees only these inputs, never the labels.
+        # Forward calibration sees only these inputs, never the labels. This
+        # slice is small and is replayed by every backend, so it stays resident.
         calibration_batches = batches[: max(1, args.calibration_batches)]
         args.calibration_inputs = [
-            {"input_ids": b["input_ids"]} if is_gpt2 else {"pixel_values": b["pixel_values"]}
+            {"input_ids": b["input_ids"].to(args.device)}
+            if is_gpt2
+            else {"pixel_values": b["pixel_values"].to(args.device)}
             for b in calibration_batches
         ]
         args.calibration_sample_count = sum(
             int(b["input_ids"].numel() if is_gpt2 else b["pixel_values"].shape[0])
             for b in calibration_batches
         )
+
+        # Streaming compares each batch against a second, unconverted model and
+        # throws the logits away, instead of holding the whole split twice. It
+        # is the only way the full WikiText-2 run fits in host memory.
+        streaming = bool(args.stream_metrics) and is_gpt2
+        reference_model: nn.Module | None = None
+        if streaming:
+            print(f"[{model_name}] streaming metrics: keeping a second exact model "
+                  f"instead of {len(batches) * args.gpt2_sequence_length * 50257 * 4 / 1024**3:.0f} "
+                  f"GiB of cached logits", flush=True)
+            reference_model = builder(args)
+            reference_model.eval()
 
         reference_logits: torch.Tensor | None = None
         for scope in args.scopes:
@@ -695,13 +1007,23 @@ def main() -> None:
                 print(f"[{model_name}] scope={scope} backend={backend} ...", flush=True)
                 model = builder(args)
                 coverage = convert(model, backend, scope, args, is_gpt2)
-                started = time.perf_counter()
-                outcome = runner(model, batches)
-                elapsed = time.perf_counter() - started
-                logits = outcome.pop("logits").cpu()
-                if backend == "exact":
-                    reference_logits = logits
-                if args.save_logits:
+
+                if streaming:
+                    outcome = run_gpt2_streaming(
+                        model, None if backend == "exact" else reference_model, batches
+                    )
+                    elapsed = float(outcome.pop("approximate_forward_seconds"))
+                    streamed = outcome.pop("streamed_metrics", None)
+                    logits = None
+                else:
+                    started = time.perf_counter()
+                    outcome = runner(model, batches)
+                    elapsed = time.perf_counter() - started
+                    streamed = None
+                    logits = outcome.pop("logits").cpu()
+                    if backend == "exact":
+                        reference_logits = logits
+                if args.save_logits and logits is not None:
                     # Caching the raw outputs means a change to the comparison
                     # metrics never costs another emulated forward pass, which
                     # is the expensive part by orders of magnitude. It is only
@@ -728,7 +1050,21 @@ def main() -> None:
                     "emulated_forward_seconds": elapsed,
                     **outcome,
                 }
-                if reference_logits is not None and backend != "exact":
+                if backend in COSTED_BACKENDS:
+                    # An analytical proxy for the weighted product, recorded so
+                    # the trade-off tables never have to recompute it from the
+                    # configuration by hand. The nonlinear tables are costed
+                    # separately and are not part of this record.
+                    entry["multiplier_cost"] = multiplier_cost_summary(
+                        backend,
+                        args.prefix_bits,
+                        args.dyadic_terms,
+                        args.mantissa_bits,
+                        args.max_shift,
+                    )
+                if streamed is not None:
+                    entry.update(streamed)
+                elif reference_logits is not None and backend != "exact" and logits is not None:
                     entry.update(compare_to_reference(logits, reference_logits))
                 results.append(entry)
                 args.output.write_text(json.dumps(record, indent=2), encoding="utf-8")

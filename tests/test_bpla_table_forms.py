@@ -183,13 +183,17 @@ class AnchorSelectionTests(unittest.TestCase):
                 )
 
     def test_auto_keeps_the_intercept_where_the_domain_abuts_the_origin(self):
-        """exp2 lives on [0,1), so the intercept is the well-conditioned choice."""
+        """exp2 lives on [0,1), so with an SPT-quantized constant the intercept
+        is the well-conditioned choice; once the constant is exact (the
+        default) nothing penalises the mid-point and auto moves there."""
 
-        config = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
-        table = SharedBPLATables(config).functional(
-            "exp2_fraction", torch.device("cpu"), torch.float32
-        )
+        device, dtype = torch.device("cpu"), torch.float32
+        legacy = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2, anchor_constant="spt")
+        table = SharedBPLATables(legacy).functional("exp2_fraction", device, dtype)
         self.assertEqual(table["anchor_mode"], "intercept")
+        exact = TorchBPLAConfig(prefix_bits=4, affine_path="dyadic", dyadic_terms=2)
+        table = SharedBPLATables(exact).functional("exp2_fraction", device, dtype)
+        self.assertEqual(table["anchor_mode"], "mid")
 
     def test_auto_moves_the_anchor_where_the_domain_is_far_from_the_origin(self):
         """1/u lives on [1,2), where the intercept is a long extrapolation."""
@@ -418,3 +422,194 @@ class MantissaWidthTests(unittest.TestCase):
                 fraction, _, _ = _fraction_and_exponent(product.float())
                 scaled = fraction * float(1 << bits)
                 torch.testing.assert_close(scaled, scaled.round(), rtol=0, atol=1e-4)
+
+
+class ChenPAMEquivalenceTests(unittest.TestCase):
+    """The Chen-PAM row is our float path with the power-of-two bypass off.
+
+    Chen et al. (IEEE TC 2022) Eq. (6) minimises the squared error over a tile
+    and returns [k0, k1, k2] = [-x_hat*y_hat, y_hat, x_hat], which is this
+    paper's centre plane. Their Eq. (24) has no special case for a zero
+    fraction, so reporting our bypass under their name would credit their
+    multiplier with accuracy it does not have.
+    """
+
+    def test_bypass_changes_only_powers_of_two(self):
+        powers = torch.tensor([0.25, 0.5, 1.0, 2.0, 4.0, -8.0])
+        others = torch.tensor([1.3, -2.7, 0.4, 3.9, -1.1, 6.25])
+        on = TorchBPLAConfig(prefix_bits=4, affine_path="float")
+        off = TorchBPLAConfig(prefix_bits=4, affine_path="float", power_of_two_exact=False)
+
+        # Exact where a fraction is zero, approximate once the bypass is gone.
+        torch.testing.assert_close(
+            bpla_multiply_torch(powers, others, on), powers * others, rtol=1e-6, atol=0.0
+        )
+        self.assertFalse(
+            torch.allclose(bpla_multiply_torch(powers, others, off), powers * others)
+        )
+
+    def test_bypass_is_inert_away_from_powers_of_two(self):
+        torch.manual_seed(11)
+        a = torch.empty(20000).uniform_(-6.0, 6.0)
+        b = torch.empty(20000).uniform_(-6.0, 6.0)
+        on = TorchBPLAConfig(prefix_bits=4, affine_path="float")
+        off = TorchBPLAConfig(prefix_bits=4, affine_path="float", power_of_two_exact=False)
+        # A uniform draw practically never lands on a zero fraction, so the two
+        # paths must agree; a difference here would mean the flag does more than
+        # it claims.
+        torch.testing.assert_close(
+            bpla_multiply_torch(a, b, on), bpla_multiply_torch(a, b, off)
+        )
+
+
+class PowerOfTwoConstantTests(unittest.TestCase):
+    """Constants that are powers of two are shifts, and the flag must say so."""
+
+    def test_predicate(self):
+        from modules.torch_bpla import _is_power_of_two
+
+        for v in (0.125, 0.5, 1.0, 2.0, -8.0, 2.0 ** -20):
+            self.assertTrue(_is_power_of_two(v), v)
+        for v in (0.0, 0.3, 1.4426950408889634, 3.0, float("inf"), float("nan")):
+            self.assertFalse(_is_power_of_two(v), v)
+
+    def test_chen_pam_config_disables_bypass_but_shifts_constants(self):
+        """The Chen-PAM row: no operand bypass, but 2^-3 applied as a shift.
+
+        Without the second half every attention score in the row carried
+        centre-plane error right before Softmax -- a cost no PAM deployment
+        pays, since 1/sqrt(64) is a shift in any datapath -- and the ViT column
+        ranked the exact-coefficient plane below the T=2 SPT one for that reason
+        alone.
+        """
+
+        cfg = TorchBPLAConfig(prefix_bits=4, affine_path="float",
+                              power_of_two_exact=False,
+                              exact_power_of_two_constants=True)
+        self.assertFalse(cfg.power_of_two_exact)
+        self.assertTrue(cfg.exact_power_of_two_constants)
+        # And the bypass really is off on data: a power-of-two *operand* is
+        # still approximated, exactly as PAM's Eq. (24) would.
+        powers = torch.tensor([0.5, 1.0, 2.0])
+        others = torch.tensor([1.3, -2.7, 0.4])
+        self.assertFalse(torch.allclose(bpla_multiply_torch(powers, others, cfg), powers * others))
+
+
+class AnchorConstantTests(unittest.TestCase):
+    """The nonlinear anchor constant is added, never multiplied, so it need not
+    be SPT. Storing it on the datapath grid instead frees the anchor choice:
+    ``auto`` then moves every table to the segment mid-point, where slope
+    quantization error acts over half a segment instead of the distance from
+    the origin, and the tables land on their float floor."""
+
+    DOMAINS = {
+        "exp2_fraction": (lambda g: torch.rand(200000, generator=g), torch.exp2),
+        "reciprocal_unit_mantissa": (
+            lambda g: 1.0 + torch.rand(200000, generator=g),
+            torch.reciprocal,
+        ),
+        "rsqrt_mantissa": (lambda g: 0.5 + 1.5 * torch.rand(200000, generator=g), torch.rsqrt),
+    }
+
+    @staticmethod
+    def _config(**overrides) -> TorchBPLAConfig:
+        base = dict(prefix_bits=4, affine_path="dyadic", dyadic_terms=2, nonlinear_dyadic_terms=4)
+        return TorchBPLAConfig(**{**base, **overrides})
+
+    def _error(self, name: str, config: TorchBPLAConfig) -> float:
+        generator = torch.Generator().manual_seed(3)
+        sampler, exact_fn = self.DOMAINS[name]
+        x = sampler(generator)
+        exact = exact_fn(x)
+        approx = _functional_bpla(x, name, config, SharedBPLATables(config))
+        return float((approx - exact).pow(2).mean().sqrt() / exact.pow(2).mean().sqrt())
+
+    def _gelu_error(self, config: TorchBPLAConfig) -> float:
+        from modules.torch_bpla import TARGETS, bpla_activation_torch, build_activation_table_torch
+
+        x = torch.linspace(-4.0, 4.0, 200001)
+        table = build_activation_table_torch("gelu", config, torch.device("cpu"), torch.float32)
+        return float((bpla_activation_torch(x, table, config) - TARGETS["gelu"](x)).pow(2).mean().sqrt())
+
+    def test_default_keeps_the_constant_exact_and_spt_is_still_available(self):
+        """Since 2026-09-11 SPT applies to the slope only; the constant is
+        exact at full width. ``spt`` reproduces the older runs."""
+
+        from modules.torch_bpla import _signed_pot_quantize
+
+        config = self._config()
+        self.assertEqual(config.anchor_constant, "fixed")
+        self.assertEqual(TorchBPLAConfig().anchor_constant, "fixed")
+        device, dtype = torch.device("cpu"), torch.float32
+        for name in self.DOMAINS:
+            default = SharedBPLATables(config).functional(name, device, dtype)["anchor_y"]
+            exact = SharedBPLATables(self._config(affine_path="float")).functional(name, device, dtype)["anchor_y"]
+            self.assertTrue(torch.equal(default, exact), name)
+            legacy = SharedBPLATables(self._config(anchor_constant="spt")).functional(name, device, dtype)["anchor_y"]
+            self.assertTrue(torch.equal(_signed_pot_quantize(legacy, 4, 16), legacy), name)
+            self.assertFalse(torch.equal(legacy, exact), name)
+
+    def test_fixed_at_full_width_stores_the_exact_constant(self):
+        for name in self.DOMAINS:
+            for mode in ("intercept", "left", "mid"):
+                fixed = SharedBPLATables(self._config(anchor_constant="fixed", anchor_mode=mode))
+                exact = SharedBPLATables(self._config(affine_path="float", anchor_mode=mode))
+                device, dtype = torch.device("cpu"), torch.float32
+                self.assertTrue(
+                    torch.equal(fixed.functional(name, device, dtype)["anchor_y"],
+                                exact.functional(name, device, dtype)["anchor_y"]),
+                    f"{name} {mode}",
+                )
+
+    def test_fixed_rounds_to_the_datapath_grid(self):
+        config = self._config(anchor_constant="fixed", mantissa_bits=12)
+        for name in self.DOMAINS:
+            anchor = SharedBPLATables(config).functional(name, torch.device("cpu"), torch.float32)["anchor_y"]
+            scaled = anchor * float(1 << 11)
+            self.assertTrue(torch.equal(scaled, scaled.round()), name)
+
+    def test_fixed_is_never_worse_and_halves_the_error_at_the_reported_budget(self):
+        for name in self.DOMAINS:
+            for terms in (1, 2, 3, 4):
+                spt = self._error(name, self._config(nonlinear_dyadic_terms=terms, anchor_constant="spt"))
+                fixed = self._error(name, self._config(nonlinear_dyadic_terms=terms, anchor_constant="fixed"))
+                self.assertLessEqual(fixed, spt * 1.001, msg=f"{name} T={terms}: fixed {fixed} vs spt {spt}")
+            spt = self._error(name, self._config(anchor_constant="spt"))
+            fixed = self._error(name, self._config(anchor_constant="fixed"))
+            self.assertLess(fixed * 2.0, spt, msg=f"{name} T=4: fixed {fixed:.3e} vs spt {spt:.3e}")
+
+    def test_fixed_reaches_the_float_floor_at_the_reported_budget(self):
+        """With the constant exact and the anchor at mid-segment, T=4 slopes
+        leave the tables within a few percent of unquantized coefficients."""
+
+        for name in self.DOMAINS:
+            fixed = self._error(name, self._config(anchor_constant="fixed"))
+            floor = self._error(name, self._config(affine_path="float"))
+            self.assertLess(fixed, floor * 1.05, msg=f"{name}: fixed {fixed:.3e} vs float {floor:.3e}")
+
+    def test_gelu_table_improves_too(self):
+        spt = self._gelu_error(self._config(anchor_constant="spt"))
+        fixed = self._gelu_error(self._config(anchor_constant="fixed"))
+        self.assertLess(fixed * 2.0, spt, msg=f"gelu: fixed {fixed:.3e} vs spt {spt:.3e}")
+
+    def test_multiplier_tables_are_untouched(self):
+        device, dtype = torch.device("cpu"), torch.float32
+        spt = SharedBPLATables(self._config(anchor_constant="spt")).multiplier(device, dtype)["centers"]
+        fixed = SharedBPLATables(self._config(anchor_constant="fixed")).multiplier(device, dtype)["centers"]
+        self.assertTrue(torch.equal(spt, fixed))
+        a, b = _operands()
+        self.assertTrue(
+            torch.equal(
+                bpla_multiply_torch(a, b, self._config(anchor_constant="spt")),
+                bpla_multiply_torch(a, b, self._config(anchor_constant="fixed")),
+            )
+        )
+
+    def test_rejects_an_unknown_value(self):
+        with self.assertRaises(ValueError):
+            _functional_bpla(
+                torch.rand(8),
+                "exp2_fraction",
+                self._config(anchor_constant="float"),
+                SharedBPLATables(self._config(anchor_constant="float")),
+            )

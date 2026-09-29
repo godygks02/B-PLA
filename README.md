@@ -87,7 +87,7 @@ bash run_ptq.sh          # matched 6-backend run, multiplication scope
 
 ## Table Construction and Replacement Scope
 
-Two `TorchBPLAConfig` fields control how coefficient tables are built. Both
+Three `TorchBPLAConfig` fields control how coefficient tables are built. The
 defaults are the better choice; the alternatives exist to reproduce older runs.
 
 - `multiplier_form` (default `separable`): the tile-centre plane is separable,
@@ -96,8 +96,16 @@ defaults are the better choice; the alternatives exist to reproduce older runs.
   equal term budget and 48x smaller.
 - `anchor_mode` (default `auto`): the point each 1-D segment is expanded around
   is chosen per table by measured error. Expanding about the `y`-intercept is a
-  long extrapolation for tables far from the origin; `auto` keeps the intercept
-  for `exp2` and moves it for the reciprocal and reciprocal square root.
+  long extrapolation for tables far from the origin.
+- `anchor_constant` (default `fixed`, since 2026-09-11): SPT quantization applies
+  to each 1-D segment's slope only; the anchor constant is held exact on the
+  datapath grid (`mantissa_bits`, i.e. exact at full width). It is only ever
+  added, so this removes no shift-add, while the SPT constant was the whole
+  quantization penalty of the reciprocal and rsqrt tables at T=4. With the
+  constant exact, `auto` moves every table's anchor to the segment mid-point.
+  `spt` reproduces the combined-scope runs made before that date, which
+  quantized slope and constant alike; the weighted scope is unaffected either
+  way, since the separable multiplier stores no constant.
 
 Two module types are outside the default replacement scope and convert only when
 asked, so that widening coverage stays an explicit and reported choice:
@@ -117,6 +125,35 @@ its primitives. Section 2.7 of that paper sketches an `alpha` error-compensation
 constant but reports no results for it; the primitive experiment fits and reports
 it as the `pao-alpha` condition, because leaving it off would measure an
 avoidable deficiency of the baseline rather than a property of the method.
+
+## Chen-PAM Against the (k, T, B) Knobs
+
+Chen et al.'s PAM (IEEE TC 2022) is the exact-coefficient tile-centre plane
+that B-PLA's weighted branch adopts, built level by level with no coefficient
+table; `chen-pam` is that arithmetic at level `--prefix-bits`, without our
+power-of-two operand bypass. At one operating point it is more accurate than
+B-PLA SPT, as an exact plane should be against two SPT terms. What B-PLA has
+instead is three cost knobs -- prefix width `k`, term budget `T`, datapath
+width `B` -- against PAM's one (the level). `run_pam_tradeoff.sh` measures
+every knob on the full WikiText-2 test split and the full Imagenette
+validation split beside PAM at levels 2-5, and `report_pam_tradeoff.py` joins
+each point's fidelity with its arithmetic cost:
+
+```bash
+./run_pam_tradeoff.sh                 # H100: phases 1-4, about 63 h; BPLA_PHASES="1 2 3" for the core 50 h
+python report_pam_tradeoff.py         # Markdown table with per-product and per-inference cost
+python report_pam_tradeoff.py --latex tables/table_pam_tradeoff.tex --figure
+```
+
+The cost columns come from `modules/compute_energy.py`: fixed-point additions
+per product in one addend convention for both methods (B-PLA's separable
+evaluator needs `2T+3`; PAM level `k` needs `k+4` full-width plus `k`
+narrower residual additions, from Eq. (22) of the ICCAD 2020 paper), the
+table-driven shifts B-PLA has and PAM does not, coefficient storage, and the
+45 nm energy proxy. Note that the proxy now counts the separable form, so
+B-PLA at `(4, 2, B=12)` is 1.59x an INT8 multiply rather than the 1.78x the
+v3 draft quotes from the legacy `plane` count; `BPLAComputeConfig(...,
+multiplier_form="plane")` reproduces the old figure.
 
 ## Install
 

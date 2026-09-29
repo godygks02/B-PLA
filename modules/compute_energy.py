@@ -30,6 +30,13 @@ class ComputeEnergyTablePJ:
     int8_add: float = 0.03
     int32_mul: float = 3.10
     fixed_shift: float = 0.0
+    #: A shift whose distance comes from a table rather than from wiring: a
+    #: barrel shifter or a mux over the distances the table can hold. This is
+    #: what the B-PLA SPT terms use and what Chen-PAM's fixed per-level shifts
+    #: do not. It defaults to free, like ``fixed_shift``, which keeps the paper's
+    #: convention and favours B-PLA; the count is reported separately so a
+    #: reader can charge it.
+    variable_shift: float = 0.0
     small_control: float = 0.005
     fp32_tanh: float = 0.0
     # Optimistic configurable proxies. Horowitz (2014) does not provide the
@@ -49,6 +56,13 @@ class BPLAComputeConfig:
     affine_path: str = "dyadic"
     dyadic_terms: int = 2
     mantissa_bits: int = 24
+    #: Which evaluator the counts describe. ``separable`` is Eq. (15) of the
+    #: paper, ``nu*m1 + mu*(m2 - nu)``: two SPT coefficient-operand products,
+    #: so 2T shifted terms. ``plane`` is the legacy three-coefficient form
+    #: ``a*m1 + b*m2 + c`` with 3T terms; it is kept so older energy figures
+    #: can be reproduced, and it is what the 1.78x-INT8 figure of the v3 draft
+    #: was computed with.
+    multiplier_form: str = "separable"
 
     def __post_init__(self) -> None:
         if self.affine_path not in {"float", "dyadic"}:
@@ -57,6 +71,8 @@ class BPLAComputeConfig:
             raise ValueError("dyadic_terms must be positive.")
         if self.mantissa_bits <= 0:
             raise ValueError("mantissa_bits must be positive.")
+        if self.multiplier_form not in {"separable", "plane"}:
+            raise ValueError("multiplier_form must be 'separable' or 'plane'.")
 
 
 @dataclass(frozen=True)
@@ -134,22 +150,39 @@ def bpla_multiplier_energy_pj(
 ) -> dict[str, float]:
     """Energy for product generation only; dot-product accumulation is separate."""
 
+    # Counting convention, shared with ``chen_pam_multiplier_energy_pj`` so the
+    # two are comparable: the mantissa is a sum of addends -- the leading one,
+    # m1, m2 and every shifted coefficient term -- and each addend beyond the
+    # first costs one fixed-point addition. A subtraction is an addition.
+    variable_shift_count = 0
     if config.affine_path == "float":
-        # a*m1 + b*m2 + c, then 1 + m1 + m2 + cross.
+        # Two coefficient products, then the reduction and 1 + m1 + m2 + cross.
         fp_mul_count = 2
         fp_add_count = 5
         fixed_shift_count = 0
         fixed_add_count = 0
         arithmetic = fp_mul_count * table.fp32_mul + fp_add_count * table.fp32_add
-    else:
-        # Current software represents a, b, and c with T signed-POT terms.
-        # Reducing 3T terms takes 3T-1 adds; mantissa reconstruction takes 3.
+    elif config.multiplier_form == "plane":
+        # Legacy a*m1 + b*m2 + c with T signed-POT terms each: 3 + 3T addends.
         fp_mul_count = 0
         fp_add_count = 0
         fixed_shift_count = 3 * config.dyadic_terms
         fixed_add_count = 3 * config.dyadic_terms + 2
         arithmetic = (
             fixed_shift_count * table.fixed_shift
+            + fixed_add_count * table.fixed_add(config.mantissa_bits)
+        )
+    else:
+        # Separable nu*m1 + mu*(m2 - nu): the subtraction, then 3 + 2T addends.
+        # The shift distances come from the coefficient table, so they are
+        # variable shifts; the paper's convention prices them at zero.
+        fp_mul_count = 0
+        fp_add_count = 0
+        fixed_shift_count = 0
+        variable_shift_count = 2 * config.dyadic_terms
+        fixed_add_count = 2 * config.dyadic_terms + 3
+        arithmetic = (
+            variable_shift_count * table.variable_shift
             + fixed_add_count * table.fixed_add(config.mantissa_bits)
         )
 
@@ -159,10 +192,13 @@ def bpla_multiplier_energy_pj(
     total = arithmetic + exponent_energy + control_energy
     return {
         "affine_path": config.affine_path,
+        "multiplier_form": config.multiplier_form,
         "dyadic_terms": float(config.dyadic_terms),
+        "mantissa_bits": float(config.mantissa_bits),
         "fp32_mul_count": float(fp_mul_count),
         "fp32_add_count": float(fp_add_count),
         "fixed_shift_count": float(fixed_shift_count),
+        "variable_shift_count": float(variable_shift_count),
         "fixed_add_count": float(fixed_add_count),
         "arithmetic_energy_pj": arithmetic,
         "exponent_energy_pj": exponent_energy,
@@ -171,6 +207,143 @@ def bpla_multiplier_energy_pj(
         "fp32_mul_pj": table.fp32_mul,
         "ratio_to_fp32_mul": total / table.fp32_mul,
         "savings_vs_fp32_mul_pct": 100.0 * (1.0 - total / table.fp32_mul),
+    }
+
+
+def chen_pam_multiplier_energy_pj(
+    level: int,
+    mantissa_bits: int,
+    table: ComputeEnergyTablePJ,
+) -> dict[str, float | list[float]]:
+    """Energy of one product on Chen et al.'s PAM at a given level.
+
+    PAM (Chen, Qian, Imani, Yin, Zhuo; ICCAD 2020, IEEE TC 2022) evaluates the
+    same tile-centre plane as B-PLA's float path, but builds it level by
+    level: Level 0 is ``1.5x + 1.5y - 2.25`` on the whole mantissa square, and
+    every further level ``i`` adds the increment of Eq. (22) of the ICCAD
+    paper,
+
+        dz_i = [(+/-)(y - y_hat_{i-1}) + (+/-)(x - x_hat_{i-1})] >> (i+1)
+               + (+/-) 2^-(2i+2),
+
+    where the signs come from mantissa bits ``x[i]``, ``y[i]`` and their XOR,
+    the residuals ``x - x_hat_{i-1}`` are bit selections, and every shift
+    distance is a design-time constant. Level ``i`` therefore partitions each
+    mantissa on its top ``i`` bits -- our prefix width ``k = i`` -- and holds
+    no coefficient table at all.
+
+    Counted in the same addend convention as ``bpla_multiplier_energy_pj``:
+
+    * full-width additions: ``m1 + m2`` once, the Level-0 reconstruction
+      ``1 + s + (s >> 1) + C`` (three), and one accumulation per level;
+    * one narrower addition per level, ``(+/-)r_y + (+/-)r_x``, whose operands
+      have lost their top ``i - 1`` bits, so it is ``B - i + 1`` bits wide;
+    * ``C`` merges the ``-0.25`` and the per-level ``2^-(2i+2)`` constants,
+      which occupy distinct bit positions, so it is logic, not addition;
+    * shifts are all fixed and therefore wiring; sign selection is control.
+
+    This is PAM's ideal arithmetic. The synthesised circuit additionally
+    truncates operands inside Eq. (24) of the TC paper, which we do not model,
+    so the row is at least as accurate as the hardware it stands for.
+    """
+
+    if level < 0:
+        raise ValueError("level must be non-negative.")
+    if mantissa_bits <= 0:
+        raise ValueError("mantissa_bits must be positive.")
+    full_add_count = level + 4
+    narrow_add_widths = [max(1, mantissa_bits - i + 1) for i in range(1, level + 1)]
+    fixed_shift_count = level + 1
+    arithmetic = (
+        full_add_count * table.fixed_add(mantissa_bits)
+        + sum(table.fixed_add(width) for width in narrow_add_widths)
+        + fixed_shift_count * table.fixed_shift
+    )
+    # Full-width-equivalent addition count, for a single cost axis.
+    equivalent_add_count = full_add_count + sum(narrow_add_widths) / mantissa_bits
+    exponent_energy = 0.5 * table.int32_add
+    control_energy = table.small_control * (level + 1)
+    total = arithmetic + exponent_energy + control_energy
+    return {
+        "level": float(level),
+        "mantissa_bits": float(mantissa_bits),
+        "fp32_mul_count": 0.0,
+        "fp32_add_count": 0.0,
+        "fixed_shift_count": float(fixed_shift_count),
+        "variable_shift_count": 0.0,
+        "full_add_count": float(full_add_count),
+        "narrow_add_count": float(level),
+        "narrow_add_widths": [float(width) for width in narrow_add_widths],
+        "fixed_add_count": equivalent_add_count,
+        "arithmetic_energy_pj": arithmetic,
+        "exponent_energy_pj": exponent_energy,
+        "control_energy_pj": control_energy,
+        "total_pj": total,
+        "fp32_mul_pj": table.fp32_mul,
+        "ratio_to_fp32_mul": total / table.fp32_mul,
+        "savings_vs_fp32_mul_pct": 100.0 * (1.0 - total / table.fp32_mul),
+    }
+
+
+def bpla_coefficient_bits(prefix_bits: int, dyadic_terms: int, max_shift: int = 16) -> int:
+    """Storage of the separable multiplier table: 2^k tile centres, T signed
+    power-of-two terms each, one sign bit plus a shift index per term."""
+
+    if prefix_bits <= 0 or dyadic_terms <= 0:
+        raise ValueError("prefix_bits and dyadic_terms must be positive.")
+    term_bits = 1 + max(1, max_shift.bit_length())
+    return (1 << prefix_bits) * dyadic_terms * term_bits
+
+
+def multiplier_cost_summary(
+    backend: str,
+    prefix_bits: int,
+    dyadic_terms: int,
+    mantissa_bits: int | None,
+    max_shift: int = 16,
+    table: ComputeEnergyTablePJ | None = None,
+) -> dict[str, float | str]:
+    """One flat cost record per weighted-scope backend, for result files.
+
+    ``mantissa_bits`` of ``None`` is the float32 significand, 24 bits. The
+    record is an arithmetic proxy under the 45 nm table -- no coefficient
+    fetch, register, routing or memory traffic -- and says so in its label.
+    """
+
+    table = table or ComputeEnergyTablePJ()
+    width = 24 if mantissa_bits is None else int(mantissa_bits)
+    if backend == "chen-pam":
+        energy = chen_pam_multiplier_energy_pj(prefix_bits, width, table)
+        coefficient_bits = 0
+        label = f"Chen-PAM level {prefix_bits}"
+    elif backend == "bpla-dyadic":
+        energy = bpla_multiplier_energy_pj(
+            BPLAComputeConfig("dyadic", dyadic_terms, width, "separable"), table
+        )
+        coefficient_bits = bpla_coefficient_bits(prefix_bits, dyadic_terms, max_shift)
+        label = f"B-PLA SPT k={prefix_bits} T={dyadic_terms} B={width}"
+    elif backend == "bpla-float":
+        energy = bpla_multiplier_energy_pj(BPLAComputeConfig("float", 1, width), table)
+        coefficient_bits = (1 << prefix_bits) * 32
+        label = f"B-PLA float k={prefix_bits}"
+    else:
+        raise ValueError(f"No multiplier cost model for backend {backend!r}.")
+    return {
+        "label": label,
+        "backend": backend,
+        "prefix_bits": float(prefix_bits),
+        "dyadic_terms": float(dyadic_terms) if backend == "bpla-dyadic" else 0.0,
+        "mantissa_bits": float(width),
+        "fixed_add_count": float(energy["fixed_add_count"]),
+        "fixed_shift_count": float(energy["fixed_shift_count"]),
+        "variable_shift_count": float(energy["variable_shift_count"]),
+        "fp32_mul_count": float(energy["fp32_mul_count"]),
+        "coefficient_bits": float(coefficient_bits),
+        "energy_pj": float(energy["total_pj"]),
+        "energy_over_int8_mul": float(energy["total_pj"]) / table.int8_mul,
+        "energy_over_fp32_mul": float(energy["total_pj"]) / table.fp32_mul,
+        "model": "45 nm arithmetic proxy (Horowitz 2014); tables, registers and "
+                 "memory excluded; shifts priced at zero",
     }
 
 
