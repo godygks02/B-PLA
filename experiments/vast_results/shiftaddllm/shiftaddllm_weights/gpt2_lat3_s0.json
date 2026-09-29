@@ -1,0 +1,574 @@
+{
+  "model_id": "gpt2",
+  "mode": "lat",
+  "wbits": 3,
+  "seed": 0,
+  "nsamples": 128,
+  "seqlen": 1024,
+  "calibration": "Salesforce/wikitext/wikitext-2-raw-v1 train, random windows",
+  "bcq_round": 50,
+  "apot_nums": 3,
+  "groupsize": -1,
+  "blocksize": 128,
+  "percdamp": 0.01,
+  "dtype": "torch.float32",
+  "upstream_commit": "1053837ae320392e6cf5611ab3378550a1f6ba11",
+  "device": "cuda",
+  "quantizer_device": "cpu",
+  "official_before": {
+    "perplexity": 29.951053619384766,
+    "windows": 280,
+    "seqlen": 1024
+  },
+  "conv1d_converted": 48,
+  "upstream_args": {
+    "wbits": 3,
+    "groupsize": -1,
+    "blocksize": 128,
+    "bcq_round": 50,
+    "apot_nums": 3,
+    "percdamp": 0.01,
+    "acc": false,
+    "lat": true,
+    "gptq": false,
+    "lut_eval": false,
+    "quant_config": null,
+    "temp_storage": null,
+    "record_error": null,
+    "pre_gptqH": true,
+    "pre_rescale": false,
+    "pre_proj": false,
+    "pre_proj_extra": 0,
+    "incoh_processing": false,
+    "act_order": true,
+    "use_bst": true,
+    "columnwise": false,
+    "block_quant": true
+  },
+  "quantize_seconds": 1916.6838455910329,
+  "blocks": [
+    {
+      "block": 0,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 162.95156250009313
+    },
+    {
+      "block": 1,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 180.19467564299703
+    },
+    {
+      "block": 2,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 164.1010970401112
+    },
+    {
+      "block": 3,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 156.36942368303426
+    },
+    {
+      "block": 4,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 160.78161002602428
+    },
+    {
+      "block": 5,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 142.73922072001733
+    },
+    {
+      "block": 6,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 163.58766425098293
+    },
+    {
+      "block": 7,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 154.50346604804508
+    },
+    {
+      "block": 8,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 154.7623725659214
+    },
+    {
+      "block": 9,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 155.1551085920073
+    },
+    {
+      "block": 10,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 166.85922423098236
+    },
+    {
+      "block": 11,
+      "sublayers": [
+        "attn.c_attn",
+        "attn.c_proj",
+        "mlp.c_fc",
+        "mlp.c_proj"
+      ],
+      "seconds": 154.67661920003593
+    }
+  ],
+  "blocks_quantized": 12,
+  "partial": false,
+  "cpu_smoke": false,
+  "binary_code": {
+    "all_conclusive": true,
+    "all_binary_coded": true,
+    "max_distinct_per_group": 8,
+    "limit": 8,
+    "matrices": 48,
+    "per_matrix": {
+      "0.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "0.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "0.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "0.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "1.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "1.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "1.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "1.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "2.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "2.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "2.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "2.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "3.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "3.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "3.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "3.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "4.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "4.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "4.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "4.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "5.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "5.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "5.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "5.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "6.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "6.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "6.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "6.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "7.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "7.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "7.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "7.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "8.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "8.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "8.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "8.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "9.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "9.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "9.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "9.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "10.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "10.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "10.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "10.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      },
+      "11.attn.c_attn": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "11.attn.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "11.mlp.c_fc": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 6144
+      },
+      "11.mlp.c_proj": {
+        "conclusive": true,
+        "binary_coded": true,
+        "max_distinct_per_group": 8,
+        "limit": 8,
+        "groups_over_limit": 0,
+        "groups": 24576
+      }
+    }
+  },
+  "official_after": {
+    "perplexity": 64.38239288330078,
+    "windows": 280,
+    "seqlen": 1024
+  },
+  "checkpoint": "results/shiftaddllm_weights/gpt2_lat3_s0.partial.pt",
+  "weights_saved": 48
+}

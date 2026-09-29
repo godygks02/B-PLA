@@ -1,0 +1,12 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (286177 > 1024). Running this sequence through the model will result in indexing errors
+[gpt2] streaming metrics: keeping a second exact model instead of 54 GiB of cached logits
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4182.83it/s]
+[gpt2] scope=multiplication backend=exact ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4921.21it/s]
+    perplexity=43.3165
+[gpt2] scope=multiplication backend=shiftaddllm ...
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4961.61it/s]
+    perplexity=71.4688, logit_nrmse=0.3898, argmax_agreement=57.1844, output_gain=0.8053
+
+wrote results/shiftaddllm_gpt2_lat3_s1.json.partial

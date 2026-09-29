@@ -1,0 +1,794 @@
+{
+  "model_id": "facebook/opt-125m",
+  "mode": "acc",
+  "wbits": 3,
+  "seed": 0,
+  "nsamples": 128,
+  "seqlen": 2048,
+  "calibration": "Salesforce/wikitext/wikitext-2-raw-v1 train, random windows",
+  "bcq_round": 50,
+  "apot_nums": 3,
+  "groupsize": -1,
+  "blocksize": 128,
+  "percdamp": 0.01,
+  "dtype": "torch.float16",
+  "upstream_commit": "1053837ae320392e6cf5611ab3378550a1f6ba11",
+  "device": "cuda",
+  "quantizer_device": "cpu",
+  "official_before": {
+    "perplexity": 27.655977249145508,
+    "windows": 140,
+    "seqlen": 2048
+  },
+  "conv1d_converted": 0,
+  "upstream_args": {
+    "wbits": 3,
+    "groupsize": -1,
+    "blocksize": 128,
+    "bcq_round": 50,
+    "apot_nums": 3,
+    "percdamp": 0.01,
+    "acc": true,
+    "lat": false,
+    "gptq": false,
+    "lut_eval": false,
+    "quant_config": null,
+    "temp_storage": null,
+    "record_error": null,
+    "pre_gptqH": true,
+    "pre_rescale": true,
+    "pre_proj": true,
+    "pre_proj_extra": 0,
+    "incoh_processing": true,
+    "act_order": true,
+    "use_bst": true,
+    "columnwise": true,
+    "block_quant": false
+  },
+  "quantize_seconds": 8142.139326210832,
+  "blocks": [
+    {
+      "block": 0,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 717.289816273842
+    },
+    {
+      "block": 1,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 692.998180591967
+    },
+    {
+      "block": 2,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 686.518968797056
+    },
+    {
+      "block": 3,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 695.4440980909858
+    },
+    {
+      "block": 4,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 694.9134168447927
+    },
+    {
+      "block": 5,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 699.2731830340344
+    },
+    {
+      "block": 6,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 699.9136401158758
+    },
+    {
+      "block": 7,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 688.5604584119283
+    },
+    {
+      "block": 8,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 637.6732442681678
+    },
+    {
+      "block": 9,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 680.7250538431108
+    },
+    {
+      "block": 10,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 642.6710698129609
+    },
+    {
+      "block": 11,
+      "sublayers": [
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.q_proj",
+        "self_attn.out_proj",
+        "fc1",
+        "fc2"
+      ],
+      "seconds": 606.1562135801651
+    }
+  ],
+  "blocks_quantized": 12,
+  "partial": false,
+  "cpu_smoke": false,
+  "binary_code": {
+    "all_conclusive": true,
+    "all_binary_coded": false,
+    "max_distinct_per_group": 384,
+    "limit": 8,
+    "matrices": 72,
+    "per_matrix": {
+      "0.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "0.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "0.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "0.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "0.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "0.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "1.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "1.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "1.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "1.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "1.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "1.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "2.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "2.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "2.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "2.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "2.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "2.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "3.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "3.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "3.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "3.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "3.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "3.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "4.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "4.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "4.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "4.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "4.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "4.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "5.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "5.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "5.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "5.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "5.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "5.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "6.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "6.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "6.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "6.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "6.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "6.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "7.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "7.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "7.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "7.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "7.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 384,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "7.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "8.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "8.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "8.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "8.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "8.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "8.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "9.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "9.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "9.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "9.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "9.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "9.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "10.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "10.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "10.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "10.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "10.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "10.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      },
+      "11.self_attn.k_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "11.self_attn.v_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "11.self_attn.q_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "11.self_attn.out_proj": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "11.fc1": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 383,
+        "limit": 8,
+        "groups_over_limit": 6144,
+        "groups": 6144
+      },
+      "11.fc2": {
+        "conclusive": true,
+        "binary_coded": false,
+        "max_distinct_per_group": 96,
+        "limit": 8,
+        "groups_over_limit": 24576,
+        "groups": 24576
+      }
+    }
+  },
+  "official_after": {
+    "perplexity": 31.31634521484375,
+    "windows": 140,
+    "seqlen": 2048
+  },
+  "paper_opt125m": {
+    "fp16": 27.65,
+    "quantized": 31.29
+  },
+  "checkpoint": "results/shiftaddllm_weights/opt125m_acc3_s0.partial.pt",
+  "weights_saved": 72
+}

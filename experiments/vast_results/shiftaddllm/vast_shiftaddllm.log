@@ -1,0 +1,64 @@
+[09-29 12:43:36] === ShiftAddLLM run: 14 jobs on GPUs 0 0 0 0 0 0 0 ===
+0, NVIDIA GeForce RTX 4060 Ti, 16380 MiB
+ShiftAddLLM already at 1053837ae320 in third_party/ShiftAddLLM
+[09-29 12:44:04] gpu0 <- opt:acc3:0 opt:lat3:0
+[09-29 12:44:04] gpu0 <- gpt2:acc3:0 gpt2:lat3:0
+[09-29 12:44:04] START gpu0 quantize opt125m_acc3_s0
+[09-29 12:44:04] gpu0 <- gpt2:acc2:0 gpt2:lat2:0
+[09-29 12:44:04] START gpu0 quantize gpt2_acc3_s0
+[09-29 12:44:04] gpu0 <- gpt2:acc3:1 gpt2:lat3:1
+[09-29 12:44:04] START gpu0 quantize gpt2_acc2_s0
+[09-29 12:44:04] gpu0 <- gpt2:acc2:1 gpt2:lat2:1
+[09-29 12:44:04] START gpu0 quantize gpt2_acc3_s1
+[09-29 12:44:04] gpu0 <- gpt2:acc3:2 gpt2:lat3:2
+[09-29 12:44:04] START gpu0 quantize gpt2_acc2_s1
+[09-29 12:44:04] gpu0 <- gpt2:acc2:2 gpt2:lat2:2
+[09-29 12:44:04] START gpu0 quantize gpt2_acc3_s2
+[09-29 12:44:04] START gpu0 quantize gpt2_acc2_s2
+[09-29 14:21:35] DONE  gpu0 quantize gpt2_acc2_s0 ('perplexity': 269.61212158203125)
+[09-29 14:21:35] START gpu0 evaluate gpt2_acc2_s0
+[09-29 14:21:39] DONE  gpu0 quantize gpt2_acc2_s1 ('perplexity': 275.8726501464844)
+[09-29 14:21:39] START gpu0 evaluate gpt2_acc2_s1
+[09-29 14:24:06] DONE  gpu0 evaluate gpt2_acc2_s1 (perplexity=426.5498, logit_nrmse=0.6692, argmax_agreement=26.9738, output_gain=0.5803)
+[09-29 14:24:06] START gpu0 quantize gpt2_lat2_s1
+[09-29 14:24:06] DONE  gpu0 evaluate gpt2_acc2_s0 (perplexity=400.6141, logit_nrmse=0.6856, argmax_agreement=28.3509, output_gain=0.5533)
+[09-29 14:24:06] START gpu0 quantize gpt2_lat2_s0
+[09-29 14:24:10] DONE  gpu0 quantize gpt2_acc2_s2 ('perplexity': 301.1978759765625)
+[09-29 14:24:10] START gpu0 evaluate gpt2_acc2_s2
+[09-29 14:26:26] DONE  gpu0 evaluate gpt2_acc2_s2 (perplexity=502.4119, logit_nrmse=0.6969, argmax_agreement=27.3952, output_gain=0.5239)
+[09-29 14:26:26] START gpu0 quantize gpt2_lat2_s2
+[09-29 14:39:18] DONE  gpu0 quantize gpt2_acc3_s0 ('perplexity': 37.255027770996094)
+[09-29 14:39:18] START gpu0 evaluate gpt2_acc3_s0
+[09-29 14:41:26] DONE  gpu0 quantize gpt2_acc3_s2 ('perplexity': 37.30247116088867)
+[09-29 14:41:26] START gpu0 evaluate gpt2_acc3_s2
+[09-29 14:41:50] DONE  gpu0 quantize gpt2_acc3_s1 ('perplexity': 37.17906188964844)
+[09-29 14:41:50] START gpu0 evaluate gpt2_acc3_s1
+[09-29 14:41:54] DONE  gpu0 evaluate gpt2_acc3_s0 (perplexity=53.9405, logit_nrmse=0.2621, argmax_agreement=70.7077, output_gain=0.9124)
+[09-29 14:41:54] START gpu0 quantize gpt2_lat3_s0
+[09-29 14:44:19] DONE  gpu0 evaluate gpt2_acc3_s2 (perplexity=53.4632, logit_nrmse=0.2700, argmax_agreement=70.3328, output_gain=0.9080)
+[09-29 14:44:19] START gpu0 quantize gpt2_lat3_s2
+[09-29 14:44:43] DONE  gpu0 evaluate gpt2_acc3_s1 (perplexity=54.5599, logit_nrmse=0.2700, argmax_agreement=69.2445, output_gain=0.9128)
+[09-29 14:44:43] START gpu0 quantize gpt2_lat3_s1
+[09-29 14:51:56] DONE  gpu0 quantize gpt2_lat2_s1 ('perplexity': 639.1317749023438)
+[09-29 14:51:56] START gpu0 evaluate gpt2_lat2_s1
+[09-29 14:52:43] DONE  gpu0 quantize gpt2_lat2_s0 ('perplexity': 603.3389892578125)
+[09-29 14:52:43] START gpu0 evaluate gpt2_lat2_s0
+[09-29 14:53:14] DONE  gpu0 quantize gpt2_lat2_s2 ('perplexity': 580.4188232421875)
+[09-29 14:53:14] START gpu0 evaluate gpt2_lat2_s2
+[09-29 14:54:16] DONE  gpu0 evaluate gpt2_lat2_s1 (perplexity=569.1760, logit_nrmse=0.7423, argmax_agreement=21.5508, output_gain=0.5855)
+[09-29 14:55:24] DONE  gpu0 evaluate gpt2_lat2_s0 (perplexity=524.1905, logit_nrmse=0.7182, argmax_agreement=21.7071, output_gain=0.6310)
+[09-29 14:55:43] DONE  gpu0 evaluate gpt2_lat2_s2 (perplexity=471.4830, logit_nrmse=0.7090, argmax_agreement=23.1427, output_gain=0.6445)
+[09-29 15:01:11] DONE  gpu0 quantize opt125m_acc3_s0 ('perplexity': 31.31634521484375)
+[09-29 15:01:11] START gpu0 quantize opt125m_lat3_s0
+[09-29 15:14:30] DONE  gpu0 quantize gpt2_lat3_s2 ('perplexity': 64.40330505371094)
+[09-29 15:14:30] START gpu0 evaluate gpt2_lat3_s2
+[09-29 15:15:17] DONE  gpu0 quantize gpt2_lat3_s0 ('perplexity': 64.38239288330078)
+[09-29 15:15:17] START gpu0 evaluate gpt2_lat3_s0
+[09-29 15:15:42] DONE  gpu0 quantize gpt2_lat3_s1 ('perplexity': 65.04115295410156)
+[09-29 15:15:42] START gpu0 evaluate gpt2_lat3_s1
+[09-29 15:17:08] DONE  gpu0 evaluate gpt2_lat3_s2 (perplexity=71.3648, logit_nrmse=0.3947, argmax_agreement=57.3946, output_gain=0.7871)
+[09-29 15:17:57] DONE  gpu0 evaluate gpt2_lat3_s0 (perplexity=67.7605, logit_nrmse=0.3760, argmax_agreement=59.2099, output_gain=0.8002)
+[09-29 15:18:03] DONE  gpu0 evaluate gpt2_lat3_s1 (perplexity=71.4688, logit_nrmse=0.3898, argmax_agreement=57.1844, output_gain=0.8053)
+[09-29 15:34:56] DONE  gpu0 quantize opt125m_lat3_s0 ('perplexity': 60.75217819213867)
+[09-29 15:34:56] === finished (0 workers reported a failure) ===
+[09-29 15:34:56] summary:  python report_shiftaddllm.py
